@@ -2,12 +2,17 @@ import sqlite3
 import hashlib
 from datetime import datetime
 import os
+import logging
 
 class DatabaseHandler:
     def __init__(self, db_path="data/wx_chat.db"):
         # 确保data目录存在
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.db_path = db_path
+        
+        # 设置日志
+        self.logger = logging.getLogger(__name__)
+        
         self.init_db()
         
     def init_db(self):
@@ -19,7 +24,7 @@ class DatabaseHandler:
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS chats (
             chat_id VARCHAR(32) PRIMARY KEY,
-            chat_type TINYINT,
+            chat_type TINYINT,  -- 1:私聊 2:群聊 3:公众号 4:系统账号
             chat_name VARCHAR(128)
         )
         ''')
@@ -56,6 +61,9 @@ class DatabaseHandler:
                 (chat_id, chat_type, chat_name)
             )
             conn.commit()
+            self.logger.info(f"创建新会话: chat_id={chat_id}, name={chat_name}, type={'群聊' if chat_type == 2 else '私聊'}")
+        else:
+            self.logger.info(f"使用已有会话: chat_id={chat_id}, name={chat_name}, type={'群聊' if chat_type == 2 else '私聊'}")
             
         conn.close()
         return chat_id
