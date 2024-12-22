@@ -1,0 +1,4 @@
+2024-12-22 19:06:35.924 wx_monitor.py[50] _parse_message -> Find Control Timeout(10s): {Name: '发送者', ControlType: TextControl}
+2024-12-22 19:06:45.951 wx_monitor.py[50] _parse_message -> Find Control Timeout(10s): {Name: '发送者', ControlType: TextControl}
+2024-12-22 19:06:55.958 wx_monitor.py[50] _parse_message -> Find Control Timeout(10s): {Name: '发送者', ControlType: TextControl}
+2024-12-22 19:07:05.967 wx_monitor.py[50] _parse_message -> Find Control Timeout(10s): {Name: '发送者', ControlType: TextControl}
