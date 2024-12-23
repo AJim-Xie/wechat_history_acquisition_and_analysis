@@ -33,16 +33,47 @@ class WeChatMonitor:
     def find_wechat(self):
         """查找微信主窗口"""
         try:
-            self.wx_window = auto.WindowControl(Name="微信")
-            if self.wx_window.Exists(maxSearchSeconds=3):
-                self.logger.info("找到微信窗口")
-                return True
-            else:
-                self.logger.warning("未找到微信窗口")
-                return False
+            # 设置较短的超时时间
+            auto.SetGlobalSearchTimeout(1.0)
+            
+            # 先尝试通过类名查找
+            try:
+                self.wx_window = auto.WindowControl(
+                    searchDepth=1, 
+                    ClassName='WeChatMainWndForPC',
+                    searchInterval=0.5  # 减少搜索间隔
+                )
+                if self.wx_window.Exists(maxSearchSeconds=1):
+                    self.logger.info("通过类名找到微信窗口")
+                    return True
+            except Exception as e:
+                self.logger.debug(f"通过类名查找失败: {e}")
+            
+            # 如果通过类名找不到，再尝试通过窗口名查找
+            try:
+                self.wx_window = auto.WindowControl(
+                    searchDepth=1, 
+                    Name="微信",
+                    searchInterval=0.5  # 减少搜索间隔
+                )
+                if self.wx_window.Exists(maxSearchSeconds=1):
+                    self.logger.info("通过窗口名找到微信窗口")
+                    return True
+            except Exception as e:
+                self.logger.debug(f"通过窗口名查找失败: {e}")
+            
+            self.logger.warning("未找到微信窗口")
+            return False
+            
+        except KeyboardInterrupt:
+            self.logger.info("用户中断操作")
+            return False
         except Exception as e:
             self.logger.error(f"查找微信窗口时出错: {e}")
             return False
+        finally:
+            # 恢复默认超时时间
+            auto.SetGlobalSearchTimeout(2.0)
     
     def get_current_chat(self):
         """获取当前聊天窗口信息"""
@@ -50,83 +81,92 @@ class WeChatMonitor:
             return None
         
         try:
-            # 获取聊天信息
-            chat_name_control = self.wx_window.ButtonControl(Name="聊天信息")
-            if not chat_name_control.Exists(maxSearchSeconds=2):
+            # 设置较短的超时时间和搜索间隔
+            auto.SetGlobalSearchTimeout(1.0)
+            
+            # 获取聊天信息按钮
+            chat_name_control = self.wx_window.ButtonControl(
+                Name="聊天信息",
+                searchInterval=0.5
+            )
+            if not chat_name_control.Exists(maxSearchSeconds=1):
                 self.logger.warning("未找到聊天信息按钮")
                 return None
             
             title = chat_name_control.Name
             self.logger.info(f"原始聊天标题: {title}")
             
-            # 定义聊天类型
-            CHAT_TYPE = {
-                'GROUP': 2,    # 群聊
-                'PRIVATE': 1,  # 私聊
-                'PUBLIC': 3,   # 公众号
-                'SYSTEM': 4,   # 系统账号
-            }
-            
-            # 优化聊天类型判断逻辑
-            def get_chat_type(title):
-                # 系统账��列表 - 扩充更多系统账号
-                system_accounts = [
-                    "文件传输助手", "微信支付", "微信团队", "微信支付分", "腾讯新闻",
-                    "QQ邮箱提醒", "微信运动", "微信小店", "支付宝", "系统通知",
-                    "微信红包", "微信收藏", "看一看", "朋友圈", "游戏", "语音记事本"
+            # 点击聊天信息按钮
+            try:
+                # 直接使用控件的 Click 方法
+                chat_name_control.Click(simulateMove=False)
+                time.sleep(0.8)  # 等待管理页面打开
+                
+                # 打印管理页面的控件树结构
+                def print_control_tree(control, level=0):
+                    self.logger.debug("  "*level + f"- {control.ControlType}: {control.Name}")
+                    for child in control.GetChildren():
+                        print_control_tree(child, level + 1)
+                
+                self.logger.debug("\n管理页面控件树结构:")
+                print_control_tree(self.wx_window)
+                
+                # 查找群聊特征控件
+                group_features = [
+                    ("ButtonControl", "查看全部群成员"),
+                    ("ButtonControl", "群聊名称"),
+                    ("TextControl", "群公告"),
+                    ("ButtonControl", "群管理"),
+                    ("ButtonControl", "全部群成员"),
+                    ("ButtonControl", "保存到通讯录"),
                 ]
                 
-                # 群聊特征 - 增加更多群聊特征
-                group_indicators = [
-                    "[群聊]", "群聊", "（", "）", "(", ")", 
-                    "交流群", "群", "讨论组", "社群", "协会",
-                    "班级", "团队", "家族", "联盟", "战队",
-                    "俱乐部", "商会", "同学", "同事"
-                ]
+                is_group = False
+                for control_type, name in group_features:
+                    try:
+                        control = getattr(self.wx_window, control_type)(Name=name)
+                        if control.Exists(maxSearchSeconds=0.2):
+                            self.logger.info(f"找到群聊特征: {name}")
+                            # 打印找到的控件信息
+                            self.logger.debug(f"控件类型: {control.ControlType}")
+                            self.logger.debug(f"控件名称: {control.Name}")
+                            self.logger.debug(f"控件位置: {control.BoundingRectangle}")
+                            is_group = True
+                            break
+                        else:
+                            self.logger.debug(f"未找到特征: {name}")
+                    except Exception as e:
+                        self.logger.debug(f"查找特征 {name} 时出错: {e}")
+                        continue
                 
-                # 公众号特征 - 增加更多公众号特征
-                public_indicators = [
-                    "公众号", "订阅号", "视频号", "小程序",
-                    "官方", "新闻", "头条", "资讯", "助手",
-                    "Bot", "机器人", "服务号"
-                ]
+                # 再次点击聊天信息按钮关闭管理页面
+                chat_name_control.Click(simulateMove=False)
+                time.sleep(0.3)  # 等待管理页面关闭
                 
-                # 判断群聊人数的正则表达式
-                group_member_pattern = r'.*[（\(](\d+)[\)）]$'
+                chat_type = 2 if is_group else 1
+                self.logger.info(f"通过管理页面判定为{'群聊' if chat_type == 2 else '私聊'}")
                 
-                # 判断顺序：系统账号 > 公众号 > 群聊 > 私聊
-                if title in system_accounts:
-                    self.logger.info(f"检测到系统账号: {title}")
-                    return CHAT_TYPE['SYSTEM'], "系统账号"
-                elif any(x in title for x in public_indicators):
-                    self.logger.info(f"检测到公众号: {title}")
-                    return CHAT_TYPE['PUBLIC'], "公众号"
-                elif any(x in title for x in group_indicators):
-                    self.logger.info(f"检测到群聊(关键词匹配): {title}")
-                    return CHAT_TYPE['GROUP'], "群聊"
-                else:
-                    # 检查群成员数量
-                    match = re.search(group_member_pattern, title)
-                    if match:
-                        member_count = int(match.group(1))
-                        if member_count > 1:
-                            self.logger.info(f"检测到群聊(成员数量 {member_count}): {title}")
-                            return CHAT_TYPE['GROUP'], "群聊"
-                    
-                    self.logger.info(f"判定为私聊: {title}")
-                    return CHAT_TYPE['PRIVATE'], "私聊"
-            
-            chat_type, type_name = get_chat_type(title)
-            self.logger.info(f"当前聊天: {title} (类型: {type_name})")
-            
-            return {
-                "chat_name": title,
-                "chat_type": chat_type
-            }
-            
+                return {
+                    "chat_name": title,
+                    "chat_type": chat_type
+                }
+                
+            except Exception as e:
+                self.logger.error(f"检查群聊特征时出错: {e}")
+                # 尝试关闭管理页面
+                try:
+                    chat_name_control.Click(simulateMove=False)
+                    time.sleep(0.3)
+                except:
+                    pass
+                return None
+                
         except Exception as e:
             self.logger.error(f"获取聊天信息时出错: {e}")
             return None
+        finally:
+            # 恢复默认超时时间
+            auto.SetGlobalSearchTimeout(2.0)
             
     def _get_media_path(self, msg_type, file_id):
         """获取媒体文件存储路径"""
@@ -282,7 +322,7 @@ class WeChatMonitor:
                     continue
         return None 
 
-    def get_messages(self):
+    def get_messages(self, last_time=None):
         """获取聊天消息"""
         if not self.wx_window:
             self.logger.warning("未找到微信窗口")
@@ -303,12 +343,18 @@ class WeChatMonitor:
             for msg in message_list.GetChildren():
                 try:
                     content = self._parse_message(msg)
-                    if content:
+                    if content and content['send_time']:
+                        # 如果有last_time，只获取更新的消息
+                        if last_time and content['send_time'] <= last_time:
+                            self.logger.debug(f"跳过旧消息: {content['send_time']}")
+                            continue
                         messages.append(content)
                 except Exception as e:
                     self.logger.error(f"解析单条消息时出错: {e}")
                     continue
-                
+            
+            if messages:
+                self.logger.info(f"获取到 {len(messages)} 条新消息")
             return messages
         except Exception as e:
             self.logger.error(f"获取消息列表时出错: {e}")

@@ -93,3 +93,23 @@ class DatabaseHandler:
             pass
         finally:
             conn.close() 
+        
+    def get_last_message_time(self, chat_id):
+        """获取最后一条消息的时间"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+            SELECT send_time FROM messages 
+            WHERE chat_id = ? 
+            ORDER BY send_time DESC 
+            LIMIT 1
+            ''', (chat_id,))
+            
+            result = cursor.fetchone()
+            if result:
+                return datetime.strptime(result[0], '%Y-%m-%d %H:%M:%S.%f')
+            return None
+        finally:
+            conn.close() 
