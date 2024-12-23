@@ -157,12 +157,100 @@ class DataAnalyzer:
         
         time_dist = dict(cursor.fetchall())
         
+        # 新增：每日消息趋势
+        cursor.execute(f"""
+        SELECT date(send_time) as date, COUNT(*) as count
+        FROM messages
+        WHERE {where_clause}
+        GROUP BY date
+        ORDER BY date
+        """, params)
+        daily_trend = dict(cursor.fetchall())
+        
+        # 新增：互动分析（回复关系）
+        cursor.execute(f"""
+        SELECT m1.sender_name as from_user, 
+               m2.sender_name as to_user,
+               COUNT(*) as interaction_count
+        FROM messages m1
+        JOIN messages m2 ON m2.msg_id = (
+            SELECT msg_id 
+            FROM messages 
+            WHERE send_time > m1.send_time 
+            AND chat_id = m1.chat_id
+            LIMIT 1
+        )
+        WHERE {where_clause.replace('send_time', 'm1.send_time')}
+        GROUP BY from_user, to_user
+        HAVING interaction_count >= 5
+        ORDER BY interaction_count DESC
+        LIMIT 20
+        """, params)
+        interactions = [dict(zip(['from_user', 'to_user', 'count'], row)) 
+                       for row in cursor.fetchall()]
+        
+        # 新增：消息长度分布
+        cursor.execute(f"""
+        SELECT 
+            CASE 
+                WHEN LENGTH(content) <= 10 THEN '短消息(≤10)'
+                WHEN LENGTH(content) <= 50 THEN '中等(11-50)'
+                WHEN LENGTH(content) <= 200 THEN '长消息(51-200)'
+                ELSE '超长消息(>200)'
+            END as length_category,
+            COUNT(*) as count
+        FROM messages
+        WHERE {where_clause} AND msg_type = 1
+        GROUP BY length_category
+        ORDER BY count DESC
+        """, params)
+        length_dist = dict(cursor.fetchall())
+        
+        # 新增：每周活跃度分析
+        cursor.execute(f"""
+        SELECT 
+            CASE strftime('%w', send_time)
+                WHEN '0' THEN '周日'
+                WHEN '1' THEN '周一'
+                WHEN '2' THEN '周二'
+                WHEN '3' THEN '周三'
+                WHEN '4' THEN '周四'
+                WHEN '5' THEN '周五'
+                WHEN '6' THEN '周六'
+            END as weekday,
+            COUNT(*) as count
+        FROM messages
+        WHERE {where_clause}
+        GROUP BY weekday
+        ORDER BY strftime('%w', send_time)
+        """, params)
+        weekly_activity = dict(cursor.fetchall())
+        
+        # 新增：表情符号使用统计
+        cursor.execute(f"""
+        SELECT content, COUNT(*) as count
+        FROM messages
+        WHERE {where_clause} 
+        AND msg_type = 1
+        AND content LIKE '%[%]%'
+        GROUP BY content
+        HAVING count >= 3
+        ORDER BY count DESC
+        LIMIT 20
+        """, params)
+        emoji_stats = dict(cursor.fetchall())
+        
         analysis_result = {
             'basic_stats': stats,
             'active_users': active_users,
             'message_types': type_stats,
             'top_keywords': top_keywords,
-            'time_distribution': time_dist
+            'time_distribution': time_dist,
+            'daily_trend': daily_trend,
+            'interactions': interactions,
+            'length_distribution': length_dist,
+            'weekly_activity': weekly_activity,
+            'emoji_stats': emoji_stats
         }
         
         return analysis_result
