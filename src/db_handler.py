@@ -21,6 +21,15 @@ class DatabaseHandler:
         cursor = conn.cursor()
         
         try:
+            # 创建chats表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chats (
+                chat_id VARCHAR(32) PRIMARY KEY,
+                chat_type TINYINT,  -- 1:私聊 2:群聊
+                chat_name VARCHAR(128)
+            )
+            ''')
+            
             # 创建messages表
             cursor.execute('''
             CREATE TABLE IF NOT EXISTS messages (
@@ -137,5 +146,34 @@ class DatabaseHandler:
             if result:
                 return datetime.strptime(result[0], '%Y-%m-%d %H:%M:%S.%f')
             return None
+        finally:
+            conn.close()
+        
+    def get_all_chats(self):
+        """获取所有会话列表"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+            SELECT chat_id, chat_name, chat_type 
+            FROM chats 
+            ORDER BY chat_name
+            ''')
+            
+            chats = []
+            for row in cursor.fetchall():
+                chats.append({
+                    'chat_id': row[0],
+                    'chat_name': row[1],
+                    'chat_type': row[2]
+                })
+                
+            self.logger.debug(f"获取到 {len(chats)} 个会话")
+            return chats
+            
+        except Exception as e:
+            self.logger.error(f"获取会话列表失败: {e}")
+            return []
         finally:
             conn.close() 

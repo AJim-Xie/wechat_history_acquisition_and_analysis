@@ -1,7 +1,10 @@
 from src.wx_monitor import WeChatMonitor
 from src.db_handler import DatabaseHandler
+from src.data_analyzer import DataAnalyzer
 import uiautomation as auto
 import time
+import sys
+from datetime import datetime
 
 def main():
     try:
@@ -10,6 +13,34 @@ def main():
             media_path="data/media"
         )
         db = DatabaseHandler()
+        analyzer = DataAnalyzer()  # 添加分析器实例
+        
+        # 处理命令行参数
+        if len(sys.argv) > 1 and sys.argv[1] == "export":
+            chat_name = input("请输入要导出的聊天名称（直接回车导出所有）：")
+            format_type = input("请选择导出格式(1:CSV 2:JSON)：")
+            start_date = input("请输入开始日期(YYYY-MM-DD，直接回车不限制)：")
+            end_date = input("请输入结束日期(YYYY-MM-DD，直接回车不限制)：")
+            
+            # 获取chat_id
+            chat_id = None
+            if chat_name:
+                chat_id = db.get_chat_id(chat_name)
+            
+            # 处理日期
+            start_time = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
+            end_time = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+            
+            # 导出文件
+            format_type = 'csv' if format_type == '1' else 'json'
+            export_file = analyzer.export_chat(
+                chat_id=chat_id,
+                start_time=start_time,
+                end_time=end_time,
+                format=format_type
+            )
+            print(f"导出完成：{export_file}")
+            return
         
         # 查找微信窗口
         if not monitor.find_wechat():
@@ -72,7 +103,7 @@ def main():
     finally:
         # 清理资源
         if 'monitor' in locals():
-            monitor.logger.info("正在清理资源...")
+            monitor.logger.info("正在清理���源...")
         auto.SetGlobalSearchTimeout(2.0)
 
 if __name__ == "__main__":
