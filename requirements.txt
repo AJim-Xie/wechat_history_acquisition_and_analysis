@@ -1,0 +1,32 @@
+# 基础依赖
+uiautomation>=3.0.0  # 用于微信界面操作
+pandas>=1.3.0        # 数据处理
+numpy>=1.20.0        # 数学计算
+
+# 数据可视化
+matplotlib>=3.4.0    # 绘图基础库
+seaborn>=0.11.0     # 统计数据可视化
+wordcloud>=1.8.1    # 词云生成
+networkx>=2.6.0     # 关系网络图
+
+# 文本处理
+jieba>=0.42.1       # 中文分词
+python-dateutil>=2.8.2  # 日期时间处理
+
+# 数据库
+sqlite3             # Python标准库，无需安装
+
+# 系统相关
+pywin32>=228        # Windows系统接口
+pillow>=8.2.0      # 图像处理
+
+# 开发工具
+logging            # Python标准库，无需安装
+datetime           # Python标准库，无需安装
+re                 # Python标准库，无需安装
+os                 # Python标准库，无需安装
+sys                # Python标准库，无需安装
+time               # Python标准库，无需安装
+json               # Python标准库，无需安装
+collections        # Python标准库，无需安装
+hashlib            # Python标准库，无需安装

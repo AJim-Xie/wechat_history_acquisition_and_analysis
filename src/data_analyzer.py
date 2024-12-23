@@ -290,3 +290,84 @@ class DataAnalyzer:
             return 0
         finally:
             conn.close() 
+    
+    def query_messages(self, chat_id=None, start_time=None, end_time=None, limit=100):
+        """查询聊天记录"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        conditions = []
+        params = []
+        
+        if chat_id:
+            conditions.append("m.chat_id = ?")
+            params.append(chat_id)
+        if start_time:
+            conditions.append("m.send_time >= ?")
+            params.append(start_time)
+        if end_time:
+            conditions.append("m.send_time <= ?")
+            params.append(end_time)
+            
+        where_clause = " AND ".join(conditions) if conditions else "1=1"
+        
+        query = f"""
+        SELECT 
+            m.msg_id,
+            c.chat_name,
+            m.msg_type,
+            m.content,
+            m.sender_name,
+            m.send_time
+        FROM messages m
+        JOIN chats c ON m.chat_id = c.chat_id
+        WHERE {where_clause}
+        ORDER BY m.send_time DESC
+        LIMIT ?
+        """
+        params.append(limit)
+        
+        try:
+            cursor.execute(query, params)
+            messages = []
+            for row in cursor.fetchall():
+                messages.append({
+                    'msg_id': row[0],
+                    'chat_name': row[1],
+                    'msg_type': row[2],
+                    'content': row[3],
+                    'sender_name': row[4],
+                    'send_time': datetime.strptime(row[5], '%Y-%m-%d %H:%M:%S.%f')
+                })
+            return messages
+        except Exception as e:
+            self.logger.error(f"查询消息失败: {e}")
+            return []
+        finally:
+            conn.close()
+    
+    def get_all_chats(self):
+        """获取所有会话列表"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+            SELECT chat_id, chat_name, chat_type 
+            FROM chats 
+            ORDER BY chat_name
+            ''')
+            
+            return [
+                {
+                    'chat_id': row[0],
+                    'chat_name': row[1],
+                    'chat_type': row[2]
+                }
+                for row in cursor.fetchall()
+            ]
+        except Exception as e:
+            self.logger.error(f"获取会话列表失败: {e}")
+            return []
+        finally:
+            conn.close() 
