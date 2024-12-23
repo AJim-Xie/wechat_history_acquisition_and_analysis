@@ -20,30 +20,31 @@ class DatabaseHandler:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # 创建chats表
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS chats (
-            chat_id VARCHAR(32) PRIMARY KEY,
-            chat_type TINYINT,  -- 1:私聊 2:群聊 3:公众号 4:系统账号
-            chat_name VARCHAR(128)
-        )
-        ''')
-        
-        # 创建messages表
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
-            msg_id VARCHAR(32) PRIMARY KEY,
-            chat_id VARCHAR(32),
-            msg_type TINYINT,
-            content TEXT,
-            sender_name VARCHAR(64),
-            send_time TIMESTAMP,
-            FOREIGN KEY (chat_id) REFERENCES chats(chat_id)
-        )
-        ''')
-        
-        conn.commit()
-        conn.close()
+        try:
+            # 创建messages表
+            cursor.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                msg_id VARCHAR(32) PRIMARY KEY,
+                chat_id VARCHAR(32),
+                msg_type TINYINT,
+                content TEXT,
+                sender_name VARCHAR(64),
+                send_time TIMESTAMP,
+                FOREIGN KEY (chat_id) REFERENCES chats(chat_id)
+            )
+            ''')
+            
+            # 创建唯一索引
+            cursor.execute('''
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_message_unique 
+            ON messages(chat_id, sender_name, send_time, content)
+            ''')
+            
+            conn.commit()
+        except Exception as e:
+            self.logger.error(f"初始化数据库失败: {e}")
+        finally:
+            conn.close()
         
     def get_chat_id(self, chat_name, chat_type):
         """获取或创建chat_id"""
@@ -70,12 +71,34 @@ class DatabaseHandler:
         
     def save_message(self, chat_id, message):
         """保存消息"""
-        msg_id = hashlib.md5(f"{chat_id}_{message['send_time']}_{message['content']}".encode()).hexdigest()
+        # 使用更多字段生成消息ID
+        msg_id = hashlib.md5(
+            f"{chat_id}_{message['sender_name']}_{message['send_time']}_{message['content'][:100]}".encode()
+        ).hexdigest()
         
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
+            # 先检查消息是否存在
+            cursor.execute('''
+            SELECT msg_id FROM messages 
+            WHERE chat_id = ? 
+            AND sender_name = ? 
+            AND send_time = ? 
+            AND content = ?
+            ''', (
+                chat_id,
+                message['sender_name'],
+                message['send_time'],
+                message['content']
+            ))
+            
+            if cursor.fetchone():
+                self.logger.debug(f"消息已存在，跳过: {message['content'][:20]}...")
+                return
+                
+            # 插入新消息
             cursor.execute('''
             INSERT INTO messages (msg_id, chat_id, msg_type, content, sender_name, send_time)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -88,11 +111,14 @@ class DatabaseHandler:
                 message['send_time']
             ))
             conn.commit()
+            self.logger.debug(f"成功保存消息: {message['content'][:20]}...")
+            
         except sqlite3.IntegrityError:
-            # 消息已存在，忽略
-            pass
+            self.logger.debug(f"消息ID重复，跳过: {msg_id}")
+        except Exception as e:
+            self.logger.error(f"保存消息失败: {e}")
         finally:
-            conn.close() 
+            conn.close()
         
     def get_last_message_time(self, chat_id):
         """获取最后一条消息的时间"""

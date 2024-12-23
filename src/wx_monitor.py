@@ -81,7 +81,7 @@ class WeChatMonitor:
             return None
         
         try:
-            # 设置较短的超时时间和搜索间隔
+            # 设置较短的超时时间
             auto.SetGlobalSearchTimeout(1.0)
             
             # 获取聊天信息按钮
@@ -98,18 +98,8 @@ class WeChatMonitor:
             
             # 点击聊天信息按钮
             try:
-                # 直接使用控件的 Click 方法
                 chat_name_control.Click(simulateMove=False)
                 time.sleep(0.8)  # 等待管理页面打开
-                
-                # 打印管理页面的控件树结构
-                def print_control_tree(control, level=0):
-                    self.logger.debug("  "*level + f"- {control.ControlType}: {control.Name}")
-                    for child in control.GetChildren():
-                        print_control_tree(child, level + 1)
-                
-                self.logger.debug("\n管理页面控件树结构:")
-                print_control_tree(self.wx_window)
                 
                 # 查找群聊特征控件
                 group_features = [
@@ -118,23 +108,22 @@ class WeChatMonitor:
                     ("TextControl", "群公告"),
                     ("ButtonControl", "群管理"),
                     ("ButtonControl", "全部群成员"),
-                    ("ButtonControl", "保存到通讯录"),
+                    ("ButtonControl", "保存到通讯录"),  # 群聊特有
+                    ("TextControl", "群聊成员"),  # 群聊特有
+                    ("ButtonControl", "删除退出"),  # 群聊特有
                 ]
                 
                 is_group = False
+                found_features = []  # 用于记录找到的群聊特征
+                
+                # 遍历所有群聊特征
                 for control_type, name in group_features:
                     try:
                         control = getattr(self.wx_window, control_type)(Name=name)
                         if control.Exists(maxSearchSeconds=0.2):
+                            found_features.append(name)
+                            is_group = True  # 只要找到任一特征就判定为群聊
                             self.logger.info(f"找到群聊特征: {name}")
-                            # 打印找到的控件信息
-                            self.logger.debug(f"控件类型: {control.ControlType}")
-                            self.logger.debug(f"控件名称: {control.Name}")
-                            self.logger.debug(f"控件位置: {control.BoundingRectangle}")
-                            is_group = True
-                            break
-                        else:
-                            self.logger.debug(f"未找到特征: {name}")
                     except Exception as e:
                         self.logger.debug(f"查找特征 {name} 时出错: {e}")
                         continue
@@ -144,7 +133,11 @@ class WeChatMonitor:
                 time.sleep(0.3)  # 等待管理页面关闭
                 
                 chat_type = 2 if is_group else 1
-                self.logger.info(f"通过管理页面判定为{'群聊' if chat_type == 2 else '私聊'}")
+                self.logger.info(f"聊天类型判定为: {'群聊' if chat_type == 2 else '私聊'}")
+                if found_features:
+                    self.logger.info(f"找到的群聊特征: {', '.join(found_features)}")
+                else:
+                    self.logger.info("未找到任何群聊特征，判定为私聊")
                 
                 return {
                     "chat_name": title,
@@ -162,12 +155,11 @@ class WeChatMonitor:
                 return None
                 
         except Exception as e:
-            self.logger.error(f"获取聊天信息时出错: {e}")
+            self.logger.error(f"获取聊天信息失败: {e}")
             return None
         finally:
-            # 恢复默认超时时间
             auto.SetGlobalSearchTimeout(2.0)
-            
+    
     def _get_media_path(self, msg_type, file_id):
         """获取媒体文件存储路径"""
         type_folder = {
@@ -329,6 +321,8 @@ class WeChatMonitor:
             return []
         
         messages = []
+        message_hash_set = set()  # 用于消息去重
+        
         try:
             # 获取消息列表区域
             message_list = self.wx_window.ListControl(Name="消息")
@@ -336,18 +330,25 @@ class WeChatMonitor:
                 self.logger.warning("未找到消息列表")
                 return []
             
-            # 打印调试信息
-            self.logger.info(f"找到消息列表，子元素数量: {len(message_list.GetChildren())}")
-            
             # 遍历消息
             for msg in message_list.GetChildren():
                 try:
                     content = self._parse_message(msg)
                     if content and content['send_time']:
-                        # 如果有last_time，只获取更新的消息
+                        # 生成消息唯一标识
+                        msg_hash = f"{content['sender_name']}_{content['send_time']}_{content['content'][:50]}"
+                        
+                        # 检查是否重复消息
+                        if msg_hash in message_hash_set:
+                            self.logger.debug(f"跳过重复消息: {msg_hash}")
+                            continue
+                            
+                        # 检查时间
                         if last_time and content['send_time'] <= last_time:
                             self.logger.debug(f"跳过旧消息: {content['send_time']}")
                             continue
+                            
+                        message_hash_set.add(msg_hash)
                         messages.append(content)
                 except Exception as e:
                     self.logger.error(f"解析单条消息时出错: {e}")
