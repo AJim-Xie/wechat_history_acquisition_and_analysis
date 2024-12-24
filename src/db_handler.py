@@ -56,28 +56,44 @@ class DatabaseHandler:
         finally:
             conn.close()
         
-    def get_chat_id(self, chat_name, chat_type):
-        """获取或创建chat_id"""
-        chat_id = hashlib.md5(f"{chat_name}_{chat_type}".encode()).hexdigest()
+    def get_chat_id(self, chat_name, chat_type, user_input_name=None):
+        """获取或创建chat_id
+        :param chat_name: 自动获取的聊天名称
+        :param chat_type: 聊天类型
+        :param user_input_name: 用户输入的聊天名称
+        """
+        # 确定最终使用的聊天名称
+        final_name = chat_name
+        if chat_name == "聊天信息" and user_input_name:
+            final_name = user_input_name
+            self.logger.info(f"使用用户输入的名称: {user_input_name}")
+        
+        # 使用chat_name生成chat_id
+        chat_id = hashlib.md5(f"{final_name}".encode()).hexdigest()
         
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # 检查是否存在
-        cursor.execute("SELECT chat_id FROM chats WHERE chat_id = ?", (chat_id,))
-        if not cursor.fetchone():
-            # 创建新记录
-            cursor.execute(
-                "INSERT INTO chats (chat_id, chat_type, chat_name) VALUES (?, ?, ?)",
-                (chat_id, chat_type, chat_name)
-            )
-            conn.commit()
-            self.logger.info(f"创建新会话: chat_id={chat_id}, name={chat_name}, type={'群聊' if chat_type == 2 else '私聊'}")
-        else:
-            self.logger.info(f"使用已有会话: chat_id={chat_id}, name={chat_name}, type={'群聊' if chat_type == 2 else '私聊'}")
+        try:
+            # 检查是否存在
+            cursor.execute("SELECT chat_id, chat_name FROM chats WHERE chat_name = ?", (final_name,))
+            existing = cursor.fetchone()
             
-        conn.close()
-        return chat_id
+            if existing:
+                # 如果存在，返回已有的chat_id
+                self.logger.info(f"使用已有会话: chat_id={existing[0]}, name={existing[1]}")
+                return existing[0]
+            else:
+                # 创建新记录
+                cursor.execute(
+                    "INSERT INTO chats (chat_id, chat_type, chat_name) VALUES (?, ?, ?)",
+                    (chat_id, chat_type, final_name)
+                )
+                conn.commit()
+                self.logger.info(f"创建新会话: chat_id={chat_id}, name={final_name}")
+                return chat_id
+        finally:
+            conn.close()
         
     def save_message(self, chat_id, message):
         """保存消息"""
@@ -151,75 +167,104 @@ class DatabaseHandler:
             conn.close()
         
     def get_all_chats(self):
-        """获取所有会话列表"""
+        """获取所有聊天对象"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
             cursor.execute('''
-            SELECT chat_id, chat_name, chat_type 
-            FROM chats 
-            ORDER BY chat_name
+                SELECT c.chat_id, c.chat_type, c.chat_name,
+                       COUNT(m.msg_id) as msg_count,
+                       MAX(m.send_time) as last_active
+                FROM chats c
+                LEFT JOIN messages m ON c.chat_id = m.chat_id
+                GROUP BY c.chat_id
+                ORDER BY last_active DESC
             ''')
             
             chats = []
             for row in cursor.fetchall():
                 chats.append({
                     'chat_id': row[0],
-                    'chat_name': row[1],
-                    'chat_type': row[2]
+                    'chat_type': row[1],
+                    'chat_name': row[2],
+                    'msg_count': row[3],
+                    'last_active': row[4]
                 })
-                
-            self.logger.debug(f"获取到 {len(chats)} 个会话")
             return chats
-            
         except Exception as e:
-            self.logger.error(f"获取会话列表失败: {e}")
+            self.logger.error(f"获取聊天列表失败: {str(e)}")
             return []
         finally:
             conn.close()
         
     def get_chat_by_name(self, chat_name):
-        """根据chat_name查询会话"""
+        """根据chat_name查询会话，支持模糊匹配"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
             cursor.execute(
-                "SELECT chat_id, chat_type FROM chats WHERE chat_name = ?", 
-                (chat_name,)
+                "SELECT chat_id, chat_type FROM chats WHERE chat_name LIKE ?", 
+                (f"%{chat_name}%",)
             )
-            result = cursor.fetchone()
-            if result:
-                return {
-                    'chat_id': result[0],
+            results = cursor.fetchall()
+            if results:
+                return [{
+                    'chat_id': row[0],
                     'chat_name': chat_name,
-                    'chat_type': result[1]
-                }
-            return None
+                    'chat_type': row[1]
+                } for row in results]
+            return []
         finally:
             conn.close()
             
     def create_chat(self, chat_name, chat_type=1):
         """创建新的会话记录"""
-        chat_id = str(uuid.uuid4())
+        if not chat_name:
+            raise ValueError("聊天名称不能为空")
+        
+        # 使用chat_name生成chat_id
+        chat_id = hashlib.md5(f"{chat_name}".encode()).hexdigest()
         
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
+            # 检查是否存在
+            cursor.execute("SELECT chat_id, chat_name FROM chats WHERE chat_name = ?", (chat_name,))
+            existing = cursor.fetchone()
+            
+            if existing:
+                # 如果存在，返回已有的信息
+                self.logger.info(f"使用已有会话: chat_id={existing[0]}, name={existing[1]}")
+                return existing[0], existing[1]
+            
+            # 创建新记录
             cursor.execute(
                 "INSERT INTO chats (chat_id, chat_type, chat_name) VALUES (?, ?, ?)",
                 (chat_id, chat_type, chat_name)
             )
             conn.commit()
             self.logger.info(f"创建新会话: chat_id={chat_id}, name={chat_name}")
-            return chat_id
+            return chat_id, chat_name
         finally:
             conn.close()
             
     def update_chat_name(self, chat_id, new_name):
-        """更新会话名称"""
+        """更新会话名称，处理名称冲突"""
+        # 检查新名称是否与其他聊天对象冲突
+        existing = self.get_chat_by_name(new_name)
+        if existing and any(chat['chat_id'] != chat_id for chat in existing):
+            # 如果存在相同名称，添加数字后缀
+            base_name = new_name
+            counter = 1
+            while existing and any(chat['chat_id'] != chat_id for chat in existing):
+                new_name = f"{base_name}_{counter}"
+                existing = self.get_chat_by_name(new_name)
+                counter += 1
+            self.logger.info(f"处理名称冲突: {base_name} -> {new_name}")
+        
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
@@ -230,33 +275,75 @@ class DatabaseHandler:
             )
             conn.commit()
             self.logger.info(f"更新会话名称: chat_id={chat_id}, new_name={new_name}")
+            return new_name
         finally:
             conn.close()
             
-    def get_chat_messages(self, chat_id, limit=50):
-        """获取指定聊天的消息记录"""
+    def get_chat_messages(self, chat_id):
+        """获取指定聊天的所有消息"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
             cursor.execute('''
-            SELECT msg_id, sender_name, content, send_time, msg_type
-            FROM messages 
-            WHERE chat_id = ?
-            ORDER BY send_time DESC
-            LIMIT ?
-            ''', (chat_id, limit))
+                SELECT msg_id, chat_id, sender_name, send_time, content, msg_type
+                FROM messages
+                WHERE chat_id = ?
+                ORDER BY send_time DESC
+            ''', (chat_id,))
             
             messages = []
             for row in cursor.fetchall():
+                # 处理时间格式
+                try:
+                    # 先尝试带微秒的格式
+                    send_time = datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S.%f')
+                except ValueError:
+                    try:
+                        # 再尝试不带微秒的格式
+                        send_time = datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S')
+                    except ValueError as e:
+                        self.logger.error(f"无法解析时间格式: {row[3]}, {str(e)}")
+                        continue
+                
                 messages.append({
                     'msg_id': row[0],
-                    'sender_name': row[1],
-                    'content': row[2],
-                    'send_time': datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S.%f'),
-                    'msg_type': row[4]
+                    'chat_id': row[1],
+                    'sender_name': row[2],
+                    'send_time': send_time,
+                    'content': row[4],
+                    'msg_type': row[5]
                 })
-            
             return messages
+        except Exception as e:
+            self.logger.error(f"获取聊天消息失败: {str(e)}")
+            return []
+        finally:
+            conn.close()
+            
+    def get_chat_by_id(self, chat_id):
+        """根据ID获取聊天对象信息"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+            SELECT chat_id, chat_type, chat_name
+            FROM chats 
+            WHERE chat_id = ?
+            ''', (chat_id,))
+            
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'chat_id': row[0],
+                    'chat_type': row[1],
+                    'chat_name': row[2]
+                }
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"获取聊天对象信息失败: {str(e)}")
+            raise
         finally:
             conn.close() 
