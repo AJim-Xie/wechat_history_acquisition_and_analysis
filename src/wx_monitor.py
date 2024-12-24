@@ -255,7 +255,7 @@ class WeChatMonitor:
                         file_path = self._get_media_path(msg_type, file_id)
                         content = f"[视频] {file_path}"
                         self.logger.info(f"视频将保存至: {file_path}")
-                    elif "文件" in name:
+                    elif "���件" in name:
                         msg_type = 4
                         file_id = f"file_{int(time.time())}"
                         file_path = self._get_media_path(msg_type, file_id)
@@ -360,3 +360,22 @@ class WeChatMonitor:
         except Exception as e:
             self.logger.error(f"获取消息列表时出错: {e}")
             return []
+    
+    def get_chat_title(self):
+        """获取当前聊天窗口标题"""
+        if not self.wx_window:
+            return None
+            
+        try:
+            chat_name_control = self.wx_window.ButtonControl(
+                Name="聊天信息",
+                searchInterval=0.5
+            )
+            if chat_name_control.Exists(maxSearchSeconds=1):
+                title = chat_name_control.Name
+                self.logger.info(f"获取到聊天标题: {title}")
+                return title
+            return None
+        except Exception as e:
+            self.logger.error(f"获取聊天标题失败: {e}")
+            return None

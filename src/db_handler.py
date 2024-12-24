@@ -3,6 +3,7 @@ import hashlib
 from datetime import datetime
 import os
 import logging
+import uuid
 
 class DatabaseHandler:
     def __init__(self, db_path="data/wx_chat.db"):
@@ -175,5 +176,59 @@ class DatabaseHandler:
         except Exception as e:
             self.logger.error(f"获取会话列表失败: {e}")
             return []
+        finally:
+            conn.close()
+        
+    def get_chat_by_name(self, chat_name):
+        """根据chat_name查询会话"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute(
+                "SELECT chat_id, chat_type FROM chats WHERE chat_name = ?", 
+                (chat_name,)
+            )
+            result = cursor.fetchone()
+            if result:
+                return {
+                    'chat_id': result[0],
+                    'chat_name': chat_name,
+                    'chat_type': result[1]
+                }
+            return None
+        finally:
+            conn.close()
+            
+    def create_chat(self, chat_name, chat_type=1):
+        """创建新的会话记录"""
+        chat_id = str(uuid.uuid4())
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute(
+                "INSERT INTO chats (chat_id, chat_type, chat_name) VALUES (?, ?, ?)",
+                (chat_id, chat_type, chat_name)
+            )
+            conn.commit()
+            self.logger.info(f"创建新会话: chat_id={chat_id}, name={chat_name}")
+            return chat_id
+        finally:
+            conn.close()
+            
+    def update_chat_name(self, chat_id, new_name):
+        """更新会话名称"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute(
+                "UPDATE chats SET chat_name = ? WHERE chat_id = ?",
+                (new_name, chat_id)
+            )
+            conn.commit()
+            self.logger.info(f"更新会话名称: chat_id={chat_id}, new_name={new_name}")
         finally:
             conn.close() 
