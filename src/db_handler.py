@@ -231,4 +231,32 @@ class DatabaseHandler:
             conn.commit()
             self.logger.info(f"更新会话名称: chat_id={chat_id}, new_name={new_name}")
         finally:
+            conn.close()
+            
+    def get_chat_messages(self, chat_id, limit=50):
+        """获取指定聊天的消息记录"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+            SELECT msg_id, sender_name, content, send_time, msg_type
+            FROM messages 
+            WHERE chat_id = ?
+            ORDER BY send_time DESC
+            LIMIT ?
+            ''', (chat_id, limit))
+            
+            messages = []
+            for row in cursor.fetchall():
+                messages.append({
+                    'msg_id': row[0],
+                    'sender_name': row[1],
+                    'content': row[2],
+                    'send_time': datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S.%f'),
+                    'msg_type': row[4]
+                })
+            
+            return messages
+        finally:
             conn.close() 
