@@ -346,4 +346,37 @@ class DatabaseHandler:
             self.logger.error(f"获取聊天对象信息失败: {str(e)}")
             raise
         finally:
+            conn.close()
+            
+    def add_message(self, chat_id, msg_type, content, sender_name, send_time):
+        """添加新消息"""
+        if sender_name == '未知发送者':
+            return False, "跳过未知发送者的消息"
+        
+        # 生成唯一的msg_id
+        msg_id = hashlib.md5(f"{chat_id}_{sender_name}_{send_time}_{content[:50]}".encode()).hexdigest()
+        
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # 插入新消息
+            cursor.execute('''
+            INSERT INTO messages (msg_id, chat_id, msg_type, content, sender_name, send_time)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ''', (
+                msg_id,
+                chat_id,
+                msg_type,
+                content,
+                sender_name,
+                send_time
+            ))
+            conn.commit()
+            self.logger.debug(f"成功保存消息: {content[:20]}...")
+            return True, ""
+        except Exception as e:
+            self.logger.error(f"保存消息失败: {e}")
+            return False, str(e)
+        finally:
             conn.close() 

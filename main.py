@@ -91,7 +91,7 @@ def select_or_create_chat(db):
             chats = db.get_all_chats()
             if not chats:
                 print("\n当前没有已记录的聊天对象")
-                input("\n按回车键返回���级菜单...")
+                input("\n按回车键返回上级菜单...")
                 continue
             
             print("\n当前聊天对象列表：")
@@ -126,8 +126,9 @@ def show_main_menu():
     print("3. 数据导出")
     print("4. 数据清理")
     print("5. 词典管理")
+    print("6. 聊天记录搜索")
     print("0. 退出程序")
-    return input("\n请选择功能(0-5): ")
+    return input("\n请选择功能(0-6): ")
 
 def show_collection_menu():
     """显示数据采集菜单"""
@@ -142,10 +143,12 @@ def show_analysis_menu():
     print("\n=== 数据分析 ===")
     print("1. 基础统计信息")
     print("2. 可视化分析")
-    print("3. 自定义分析")
-    print("4. 生成思维导图")
-    print("0. 返回主菜单")
-    return input("\n请选择操作(0-4): ")
+    print("3. 导出分析报告")
+    print("4. 词频分析")
+    print("5. 情感分析")
+    print("6. 搜索聊天记录")
+    print("0. 返回上级菜单")
+    return input("\n请选择功能(0-6): ")
 
 def show_export_menu():
     """显示数据导出菜单"""
@@ -160,7 +163,7 @@ def show_dict_menu():
     """显示词典管理菜单"""
     print("\n=== 词典管理 ===")
     print("1. 查看词典内容")
-    print("2. 添加新词")
+    print("2. 添���新词")
     print("3. 删除词条")
     print("4. 更新词频")
     print("5. 备份词典")
@@ -199,7 +202,7 @@ def collect_data(monitor, db):
                 # 使用用户输入的名称或自动获取的名称
                 chat_id = db.get_chat_id(chat_title, chat['chat_type'], chat['chat_name'])
                 
-                # 保存消息，过滤未知发送者
+                # 保存��息，过滤未知发送者
                 saved_count = 0
                 for msg in messages:
                     if msg['sender_name'] and msg['sender_name'].strip():
@@ -263,7 +266,7 @@ def analyze_data(analyzer, db, dict_manager):
                 if int(chat_choice) > 0 and int(chat_choice) <= len(chats):
                     chat_id = chats[int(chat_choice)-1]['chat_id']
             
-            # 选择时间范围
+            # 选择时间��围
             print("\n请选择分析时间范围：")
             print("1. 最近一周")
             print("2. 最近一月")
@@ -321,7 +324,7 @@ def analyze_data(analyzer, db, dict_manager):
             print("1. 时间维度（信息趋势、活跃时段）")
             print("2. 用户维度（发言排名、活跃度）")
             print("3. 内容维度（消息类型、关键词）")
-            print("4. 群组维度（成员互动、话题分析）")
+            print("4. ��组维度（成员互动、话题分析）")
             
             dimensions = input("\n请输入维度编号: ").split(',')
             dimensions = [d.strip() for d in dimensions if d.strip() in ['1', '2', '3', '4']]
@@ -351,7 +354,7 @@ def analyze_data(analyzer, db, dict_manager):
             print("\n请选择分析时间范围：")
             print("1. 最近一周")
             print("2. 最近一月")
-            print("3. 最近三月")
+            print("3. 最近三���")
             print("4. 自定义时间范围")
             
             time_choice = input("\n请选择(1-4): ")
@@ -490,6 +493,9 @@ def analyze_data(analyzer, db, dict_manager):
                 manage_dict(dict_manager, db)
             else:
                 print("词典管理器或数据库未初始化")
+        
+        elif choice == '6':
+            search_messages(analyzer)
         
         input("\n按回车键继续...")
 
@@ -726,12 +732,93 @@ def manage_dict(dict_manager, db):
             success, msg = dict_manager.visualize_dict()
             print(msg)
             if success:
-                print("1. 词频分布图")
+                print("1. 词分布图")
                 print("2. 词云图")
                 print("3. 统计信息")
                 print("以上文件已保存到 analysis_results 目录")
         
         input("\n按回车键继续...")
+
+def search_messages(analyzer):
+    """聊天记录搜索功能"""
+    print("\n=== 聊天记录搜索 ===")
+    print("请输入搜索条件（直接回车跳过）：")
+    
+    conditions = {}
+    
+    # 显示所有发送者列表
+    senders = analyzer.get_all_senders()
+    if senders:
+        print("\n可选的发送者：")
+        for i, sender in enumerate(senders, 1):
+            print(f"{i}. {sender}")
+        
+        sender_choice = input("\n请选择发送者序号（直接回车跳过）: ").strip()
+        if sender_choice.isdigit() and 1 <= int(sender_choice) <= len(senders):
+            conditions['sender'] = senders[int(sender_choice) - 1]
+    
+    keyword = input("关键词: ").strip()
+    if keyword:
+        conditions['keyword'] = keyword
+    
+    # 显示所有@提及用户列表
+    mentions = analyzer.get_all_mentions()
+    if mentions:
+        print("\n可选的@提及用户：")
+        for i, mention in enumerate(mentions, 1):
+            print(f"{i}. {mention}")
+        
+        mention_choice = input("\n请选择@提及用户序号（直接回车跳过）: ").strip()
+        if mention_choice.isdigit() and 1 <= int(mention_choice) <= len(mentions):
+            conditions['mention'] = mentions[int(mention_choice) - 1]
+    
+    # 显示所有聊天对象列表
+    chats = analyzer.get_all_chats()
+    if chats:
+        print("\n可选的聊天对象：")
+        for i, chat in enumerate(chats, 1):
+            print(f"{i}. {chat['chat_name']} ({'群聊' if chat['chat_type'] == 2 else '私聊'})")
+        
+        chat_choice = input("\n请选择聊天对象序号（直接回车跳过）: ").strip()
+        if chat_choice.isdigit() and 1 <= int(chat_choice) <= len(chats):
+            conditions['chat_name'] = chats[int(chat_choice)-1]['chat_name']
+    
+    print("\n时间范围：")
+    print("1. 最近一天")
+    print("2. 最近一周")
+    print("3. 最近一月")
+    print("4. 自定义时间范围")
+    print("0. 不限时间")
+    
+    time_choice = input("请选择(0-4): ")
+    if time_choice in ['1', '2', '3']:
+        days = {'1': 1, '2': 7, '3': 30}[time_choice]
+        conditions['start_time'] = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    elif time_choice == '4':
+        start_date = input("开始日期(YYYY-MM-DD): ")
+        end_date = input("结束日期(YYYY-MM-DD): ")
+        try:
+            conditions['start_time'] = f"{start_date} 00:00:00"
+            conditions['end_time'] = f"{end_date} 23:59:59"
+        except ValueError:
+            print("日期格式错误")
+            return
+    
+    # 执行搜索
+    results = analyzer.search_messages(conditions)
+    
+    if not results:
+        print("\n未找到匹配的聊天记录")
+        return
+        
+    print(f"\n找到 {len(results)} 条匹配记录：")
+    print("-" * 60)
+    
+    for msg in results:
+        time_str = msg['time'].split('.')[0]  # 移除毫秒部分
+        print(f"[{time_str}] {msg['chat_name']} - {msg['sender']}:")
+        print(f"    {msg['content']}")
+        print("-" * 60)
 
 def main():
     """主函数"""
@@ -761,6 +848,8 @@ def main():
             clean_data(analyzer)
         elif choice == '5':
             manage_dict(dict_manager, db)
+        elif choice == '6':
+            search_messages(analyzer)
         else:
             print("无效的选择")
     

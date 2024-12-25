@@ -180,7 +180,7 @@ class DataAnalyzer:
         
         time_dist = dict(cursor.fetchall())
         
-        # 新增：每日消息趋���
+        # 新增：每日消息趋势
         cursor.execute(f"""
         SELECT date(send_time) as date, COUNT(*) as count
         FROM messages
@@ -484,7 +484,7 @@ class DataAnalyzer:
             if start_date:
                 try:
                     start_time = datetime.strptime(start_date, '%Y-%m-%d')
-                    # 设置为当天的开始时刻
+                    # 设置为当天的开时刻
                     start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
                     query += " AND m.send_time >= ?"
                     params.append(start_time.strftime('%Y-%m-%d %H:%M:%S.%f'))
@@ -509,7 +509,7 @@ class DataAnalyzer:
                 try:
                     send_time = datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S.%f')
                 except ValueError:
-                    # 如果时间格式不匹配，尝试其他常见格式
+                    # 如果时间格式不匹配���尝试其他常见格式
                     try:
                         send_time = datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S')
                     except ValueError:
@@ -690,7 +690,7 @@ class DataAnalyzer:
             raise ValueError(f"分析失败: {str(e)}")
     
     def _analyze_time_patterns(self, messages, output_dir):
-        """分析时间维度模式"""
+        """分析时���维度模式"""
         # 1. 消息数量趋势
         plt.figure(figsize=(15, 6))
         daily_counts = messages.groupby(messages['send_time'].dt.date).size()
@@ -928,7 +928,7 @@ class DataAnalyzer:
                             "Graphviz未正确安装或未添加到系统PATH中。\n"
                             "请按照以下步骤检查：\n"
                             "1. 确认Graphviz已正确安装: https://graphviz.org/download/\n"
-                            "2. 检查系统环境变量PATH中是否包含Graphviz的bin目录\n"
+                            "2. ��查系统环境变量PATH中是否包含Graphviz的bin目录\n"
                             "3. 重启电脑后重试\n"
                             "4. 如果问题仍然存在，请手动将Graphviz安装目录添加到PATH中"
                         )
@@ -1251,5 +1251,107 @@ class DataAnalyzer:
         except Exception as e:
             self.logger.error(f"获取聊天名称失败: {e}")
             return "未知聊天"
+        finally:
+            conn.close() 
+    
+    def search_messages(self, conditions=None):
+        """搜索聊天记录"""
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        
+        where_clauses = []
+        params = []
+        
+        if conditions:
+            if 'sender' in conditions:
+                where_clauses.append("m.sender_name LIKE ?")
+                params.append(f"%{conditions['sender']}%")
+                
+            if 'keyword' in conditions:
+                where_clauses.append("m.content LIKE ?")
+                params.append(f"%{conditions['keyword']}%")
+                
+            if 'mention' in conditions:
+                where_clauses.append("m.content LIKE ?")
+                params.append(f"%@{conditions['mention']}%")
+                
+            if 'start_time' in conditions:
+                where_clauses.append("m.send_time >= ?")
+                params.append(conditions['start_time'])
+                
+            if 'end_time' in conditions:
+                where_clauses.append("m.send_time <= ?")
+                params.append(conditions['end_time'])
+                
+            if 'chat_name' in conditions:
+                where_clauses.append("c.chat_name LIKE ?")
+                params.append(f"%{conditions['chat_name']}%")
+        
+        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+        
+        try:
+            cursor.execute(f"""
+                SELECT m.msg_id, m.chat_id, c.chat_name, m.sender_name, m.content, m.send_time, m.msg_type
+                FROM messages m
+                LEFT JOIN chats c ON m.chat_id = c.chat_id
+                WHERE {where_clause}
+                ORDER BY m.send_time DESC
+                LIMIT 1000
+            """, params)
+            
+            results = cursor.fetchall()
+            return [{
+                'msg_id': row[0],
+                'chat_id': row[1],
+                'chat_name': row[2],
+                'sender': row[3],
+                'content': row[4],
+                'time': row[5],
+                'type': row[6]
+            } for row in results]
+            
+        except Exception as e:
+            self.logger.error(f"搜索消息失败: {e}")
+            return []
+        finally:
+            conn.close() 
+    
+    def get_all_senders(self):
+        """获取所有去重后的发送者列表"""
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT DISTINCT sender_name 
+                FROM messages 
+                WHERE sender_name IS NOT NULL 
+                AND sender_name != '未知发送者'
+                ORDER BY sender_name
+            """)
+            return [row[0] for row in cursor.fetchall()]
+        finally:
+            conn.close() 
+    
+    def get_all_mentions(self):
+        """获取所有被@提及的用户列表"""
+        conn = sqlite3.connect(self.db.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("""
+                SELECT DISTINCT SUBSTR(content, INSTR(content, '@') + 1) as mention
+                FROM messages 
+                WHERE content LIKE '%@%'
+                AND content NOT LIKE '%@所有人%'
+                ORDER BY mention
+            """)
+            mentions = []
+            for row in cursor.fetchall():
+                # 提取@后面的用户名（到空格或特殊字符为止）
+                mention = re.match(r'^([^\s\n]+)', row[0])
+                if mention:
+                    mentions.append(mention.group(1))
+            return list(set(mentions))  # 去重
         finally:
             conn.close() 
