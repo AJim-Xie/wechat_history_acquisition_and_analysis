@@ -33,7 +33,7 @@ class WeChatMonitor:
     def find_wechat(self):
         """查找微信主窗口"""
         try:
-            # 设置较短的超���时间
+            # 设置较短的超时时间
             auto.SetGlobalSearchTimeout(1.0)
             
             # 先尝试通过类名查找
@@ -104,7 +104,7 @@ class WeChatMonitor:
                 # 查找群聊特征控件
                 group_features = [
                     ("ButtonControl", "查看全部群成员"),
-                    ("ButtonControl", "群聊名称"),
+                    ("ButtonControl", "���聊名称"),
                     ("TextControl", "群公告"),
                     ("ButtonControl", "群管理"),
                     ("ButtonControl", "全部群成员"),
@@ -161,14 +161,18 @@ class WeChatMonitor:
             auto.SetGlobalSearchTimeout(2.0)
     
     def _get_media_path(self, msg_type, file_id):
-        """获取媒体文件存储路径"""
+        """获取媒体文件保存路径"""
         type_folder = {
             2: 'images',
             3: 'videos',
-            4: 'files'
+            4: 'files',
+            5: 'voices',
+            6: 'emoticons'
         }.get(msg_type, 'others')
         
-        return os.path.join(self.media_path, type_folder, file_id)
+        folder_path = os.path.join(self.media_path, type_folder)
+        os.makedirs(folder_path, exist_ok=True)
+        return os.path.join(folder_path, file_id)
     
     def _parse_message(self, msg_control):
         """解析单条消息"""
@@ -219,6 +223,16 @@ class WeChatMonitor:
             # 第一次遍历：找到sender
             for control_type, name in all_controls:
                 if control_type == 50000 and not sender:
+                    if name == "查看更多消息":
+                        # 记录"查看更多消息"，但发送者和发送时间置空
+                        result = {
+                            "sender_name": None,
+                            "send_time": None,
+                            "content": "查看更多消息",
+                            "msg_type": 1  # 使用默认文本类型
+                        }
+                        self.logger.debug("记录'查看更多消息'控件")
+                        return result
                     sender = name
                     sender_name = name
                     break
@@ -235,7 +249,7 @@ class WeChatMonitor:
                         re.match(r'^\d{2}:\d{2}$', name) or
                         re.match(r'^星期[一二三四五六日] \d{2}:\d{2}$', name) or
                         re.match(r'^\d{4}年\d{2}月\d{2}日 \d{2}:\d{2}$', name) or
-                        re.match(r'^昨天 \d{2}:\d{2}$', name)  # 添加昨天格式
+                        re.match(r'^昨天 \d{2}:\d{2}$', name)
                     ):
                         time_str = name
                         original_time = self._parse_time(time_str)
@@ -243,27 +257,8 @@ class WeChatMonitor:
                             self.last_time = original_time
                         continue
                     
-                    # 识别消息类型
-                    if "图片" in name:
-                        msg_type = 2
-                        file_id = f"img_{int(time.time())}.jpg"
-                        file_path = self._get_media_path(msg_type, file_id)
-                        content = f"[图片] {file_path}"
-                        self.logger.info(f"图片将保存至: {file_path}")
-                    elif "视频" in name:
-                        msg_type = 3
-                        file_id = f"video_{int(time.time())}.mp4"
-                        file_path = self._get_media_path(msg_type, file_id)
-                        content = f"[视频] {file_path}"
-                        self.logger.info(f"视频将保存至: {file_path}")
-                    elif "文件" in name:
-                        msg_type = 4
-                        file_id = f"file_{int(time.time())}"
-                        file_path = self._get_media_path(msg_type, file_id)
-                        content = f"[文件] {file_path}"
-                        self.logger.info(f"文件将保存至: {file_path}")
-                    else:
-                        unique_names.add(name)
+                    # 将所有非时间的文本添加到唯一名称集合
+                    unique_names.add(name)
                     
                 except Exception as e:
                     self.logger.error(f"解析控件出错: {e}")
@@ -273,33 +268,94 @@ class WeChatMonitor:
             if sender_name:
                 unique_names.discard(sender_name)
             
-            # 获取content（排除sender后的最长文本）
+            # 获取content（排序sender后的最长文本）
             content = max(unique_names, key=len) if unique_names else None
+            
+            # 如果content未知，根据控件类型识别消息类型
+            if content == "未知内容" or not content:
+                for control_type, name in all_controls:
+                    try:
+                        if not name:
+                            continue
+                            
+                        # 根据控件类型识别特殊消息类型
+                        if control_type == 50001:  # 图片控件类型
+                            msg_type = 2
+                            file_id = f"img_{int(time.time())}.jpg"
+                            file_path = self._get_media_path(msg_type, file_id)
+                            content = f"[图片]"
+                            self.logger.info(f"图片将保存至: {file_path}")
+                            break
+                        elif control_type == 50002:  # 视频控件类型
+                            msg_type = 3
+                            file_id = f"video_{int(time.time())}.mp4"
+                            file_path = self._get_media_path(msg_type, file_id)
+                            content = f"[视频]"
+                            self.logger.info(f"视频将保存至: {file_path}")
+                            break
+                        elif control_type == 50003:  # 文件控件类型
+                            msg_type = 4
+                            file_id = f"file_{int(time.time())}"
+                            content = f"[文件]"
+                            file_path = self._get_media_path(msg_type, file_id)
+                            self.logger.info(f"文件将保存至: {file_path}")
+                            break
+                        elif control_type == 50004:  # 语音控件类型
+                            msg_type = 5
+                            file_id = f"voice_{int(time.time())}.mp3"
+                            file_path = self._get_media_path(msg_type, file_id)
+                            content = f"[语音]"
+                            self.logger.info(f"语音将保存至: {file_path}")
+                            break
+                        elif control_type == 50005:  # 表情控件类型
+                            msg_type = 6
+                            content = "[表情]"
+                            self.logger.info(f"��测到表情消��")
+                            break
+                        elif control_type == 50006:  # 转发消息控件类型
+                            msg_type = 7
+                            content = "[转发的聊天记录]"
+                            self.logger.info(f"检测到转发消息")
+                            break
+                    except Exception as e:
+                        self.logger.error(f"解析控件出错: {e}")
+                        continue
             
             # 检查是否为时间消息
             is_time_message = content and (
-                re.match(r'^\d{2}:\d{2}$', content) or
-                re.match(r'^星期[一二三四五六日] \d{2}:\d{2}$', content) or
-                re.match(r'^\d{4}年\d{2}月\d{2}日 \d{2}:\d{2}$', content) or
-                re.match(r'^昨天 \d{2}:\d{2}$', content)
+                re.match(r'^\d{1,2}:\d{2}$', content) or  # 修改正则以支持单位数小时
+                re.match(r'^星期[一二三四五六日] \d{1,2}:\d{2}$', content) or
+                re.match(r'^\d{4}年\d{2}月\d{2}日 \d{1,2}:\d{2}$', content) or
+                re.match(r'^昨天 \d{1,2}:\d{2}$', content)
             )
             
             if sender or content:  # 放宽条件，允许部分信息缺失
                 # 如果是未知发送者且内容是时间格式，则更新发送时间
                 if (sender == "未知发送者" or not sender) and is_time_message:
-                    parsed_time = self._parse_time(content)
-                    if parsed_time:
-                        self.last_time = parsed_time
-                        send_time = parsed_time
+                    # 获取当前日期
+                    current_date = datetime.now().date()
+                    
+                    # 解析时间���符串
+                    if re.match(r'^\d{1,2}:\d{2}$', content):
+                        # 处理纯时间格式 (H:MM 或 HH:MM)
+                        hour, minute = map(int, content.split(':'))
+                        send_time = datetime.combine(current_date, datetime.min.time().replace(hour=hour, minute=minute))
                     else:
-                        send_time = original_time or self.last_time or datetime.now()
+                        # 其他时间格式使用现有的解析方法
+                        parsed_time = self._parse_time(content)
+                        if parsed_time:
+                            send_time = parsed_time
+                        else:
+                            send_time = original_time or self.last_time or datetime.now()
+                    
+                    self.last_time = send_time
                 else:
                     send_time = original_time or self.last_time or datetime.now()
                 
                 result = {
                     "sender_name": sender or "未知发送者",
                     "send_time": send_time,
-                    "content": content or "未知内容",
+                    "content": content or "[未知类型消息]",
                     "msg_type": msg_type
                 }
                 if file_id:
@@ -326,7 +382,7 @@ class WeChatMonitor:
                 yesterday = now - timedelta(days=1)
                 return datetime(yesterday.year, yesterday.month, yesterday.day, hour, minute)
             
-            # 如果只有时分格式 (HH:MM)
+            # 如果只有时分格式 (HH:MM)，使用当天日期
             if re.match(r'^\d{2}:\d{2}$', time_str):
                 hour, minute = map(int, time_str.split(':'))
                 return datetime(now.year, now.month, now.day, hour, minute)
@@ -360,7 +416,7 @@ class WeChatMonitor:
             return []
         
         messages = []
-        message_hash_set = set()  # 用于消息去重
+        message_hash_set = set()  # 用���消息去重
         
         try:
             # 获取消息列表区域
