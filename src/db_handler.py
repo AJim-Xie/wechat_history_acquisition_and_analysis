@@ -4,6 +4,7 @@ from datetime import datetime
 import os
 import logging
 import uuid
+import csv
 
 class DatabaseHandler:
     def __init__(self, db_path="data/wx_chat.db"):
@@ -44,7 +45,7 @@ class DatabaseHandler:
             )
             ''')
             
-            # 创建唯一索引
+            # 创建唯一��引
             cursor.execute('''
             CREATE UNIQUE INDEX IF NOT EXISTS idx_message_unique 
             ON messages(chat_id, sender_name, send_time, content)
@@ -377,6 +378,81 @@ class DatabaseHandler:
             return True, ""
         except Exception as e:
             self.logger.error(f"保存消息失败: {e}")
+            return False, str(e)
+        finally:
+            conn.close()
+            
+    def export_chat(self, chat_id, output_path=None, start_date=None, end_date=None):
+        """导出聊天记录"""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        try:
+            # 准备查询条件
+            query_conditions = ["chat_id = ?"]
+            query_params = [chat_id]
+            
+            if start_date:
+                query_conditions.append("send_time >= ?")
+                query_params.append(start_date)
+            if end_date:
+                query_conditions.append("send_time <= ?")
+                query_params.append(end_date)
+            
+            # 构建查询语句
+            query = f"""
+                SELECT sender_name, send_time, content, msg_type, file_id
+                FROM messages 
+                WHERE {' AND '.join(query_conditions)}
+                ORDER BY send_time ASC
+            """
+            
+            cursor.execute(query, query_params)
+            messages = cursor.fetchall()
+            
+            if not messages:
+                return False, "未找到聊天记录"
+            
+            # 如果未指定输出路径，生成默认路径
+            if not output_path:
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                output_path = f"chat_export_{timestamp}.csv"
+            
+            # 确保输出目录存在
+            os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
+            
+            # 写入CSV文件
+            with open(output_path, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(['发送者', '发送时间', '内容', '消息类型', '文件ID'])
+                
+                for msg in messages:
+                    sender_name, send_time, content, msg_type, file_id = msg
+                    
+                    # 统一时间格式为 YYYY-MM-DD HH:MM:SS
+                    try:
+                        if isinstance(send_time, str):
+                            dt = datetime.strptime(send_time, '%Y-%m-%d %H:%M:%S.%f')
+                        else:
+                            dt = send_time
+                        formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
+                    except Exception as e:
+                        self.logger.error(f"时间格式转换失败: {send_time}, 错误: {e}")
+                        formatted_time = send_time  # 保持原始格式
+                    
+                    writer.writerow([
+                        sender_name,
+                        formatted_time,
+                        content,
+                        msg_type,
+                        file_id or ''
+                    ])
+                    
+            self.logger.info(f"导出完成: {output_path}")
+            return True, output_path
+            
+        except Exception as e:
+            self.logger.error(f"导出失败: {e}")
             return False, str(e)
         finally:
             conn.close() 

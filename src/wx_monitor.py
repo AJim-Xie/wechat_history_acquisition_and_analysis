@@ -1,6 +1,6 @@
 import uiautomation as auto
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import re
 import logging
 import os
@@ -33,7 +33,7 @@ class WeChatMonitor:
     def find_wechat(self):
         """查找微信主窗口"""
         try:
-            # 设置较短的超时时间
+            # 设置较短的超���时间
             auto.SetGlobalSearchTimeout(1.0)
             
             # 先尝试通过类名查找
@@ -234,7 +234,8 @@ class WeChatMonitor:
                     if not time_str and (
                         re.match(r'^\d{2}:\d{2}$', name) or
                         re.match(r'^星期[一二三四五六日] \d{2}:\d{2}$', name) or
-                        re.match(r'^\d{4}年\d{2}月\d{2}日 \d{2}:\d{2}$', name)
+                        re.match(r'^\d{4}年\d{2}月\d{2}日 \d{2}:\d{2}$', name) or
+                        re.match(r'^昨天 \d{2}:\d{2}$', name)  # 添加昨天格式
                     ):
                         time_str = name
                         original_time = self._parse_time(time_str)
@@ -255,7 +256,7 @@ class WeChatMonitor:
                         file_path = self._get_media_path(msg_type, file_id)
                         content = f"[视频] {file_path}"
                         self.logger.info(f"视频将保存至: {file_path}")
-                    elif "���件" in name:
+                    elif "文件" in name:
                         msg_type = 4
                         file_id = f"file_{int(time.time())}"
                         file_path = self._get_media_path(msg_type, file_id)
@@ -275,9 +276,25 @@ class WeChatMonitor:
             # 获取content（排除sender后的最长文本）
             content = max(unique_names, key=len) if unique_names else None
             
+            # 检查是否为时间消息
+            is_time_message = content and (
+                re.match(r'^\d{2}:\d{2}$', content) or
+                re.match(r'^星期[一二三四五六日] \d{2}:\d{2}$', content) or
+                re.match(r'^\d{4}年\d{2}月\d{2}日 \d{2}:\d{2}$', content) or
+                re.match(r'^昨天 \d{2}:\d{2}$', content)
+            )
+            
             if sender or content:  # 放宽条件，允许部分信息缺失
-                # 使用最后记录的时间或当前时间
-                send_time = original_time or self.last_time or datetime.now()
+                # 如果是未知发送者且内容是时间格式，则更新发送时间
+                if (sender == "未知发送者" or not sender) and is_time_message:
+                    parsed_time = self._parse_time(content)
+                    if parsed_time:
+                        self.last_time = parsed_time
+                        send_time = parsed_time
+                    else:
+                        send_time = original_time or self.last_time or datetime.now()
+                else:
+                    send_time = original_time or self.last_time or datetime.now()
                 
                 result = {
                     "sender_name": sender or "未知发送者",
@@ -300,19 +317,41 @@ class WeChatMonitor:
             
     def _parse_time(self, time_str):
         """解析时间字符串"""
-        patterns = {
-            r'^\d{2}:\d{2}$': '%H:%M',
-            r'^星期[一二三四五六日] \d{2}:\d{2}$': '%w %H:%M',
-            r'^\d{4}年\d{2}月\d{2}日 \d{2}:\d{2}$': '%Y年%m月%d日 %H:%M'
-        }
-        
-        for pattern, time_format in patterns.items():
-            if re.match(pattern, time_str):
-                try:
-                    return datetime.strptime(time_str, time_format)
-                except:
-                    continue
-        return None 
+        try:
+            now = datetime.now()
+            
+            # 如果是"昨天 HH:MM"格式
+            if re.match(r'^昨天 \d{2}:\d{2}$', time_str):
+                hour, minute = map(int, time_str.split(' ')[1].split(':'))
+                yesterday = now - timedelta(days=1)
+                return datetime(yesterday.year, yesterday.month, yesterday.day, hour, minute)
+            
+            # 如果只有时分格式 (HH:MM)
+            if re.match(r'^\d{2}:\d{2}$', time_str):
+                hour, minute = map(int, time_str.split(':'))
+                return datetime(now.year, now.month, now.day, hour, minute)
+            
+            # 如果是星期+时分格式 (星期X HH:MM)
+            if re.match(r'^星期[一二三四五六日] \d{2}:\d{2}$', time_str):
+                weekday_map = {'一':0, '二':1, '三':2, '四':3, '五':4, '六':5, '日':6}
+                weekday = weekday_map[time_str[2]]
+                hour, minute = map(int, time_str.split(' ')[1].split(':'))
+                
+                # 计算目标日期
+                days_diff = (weekday - now.weekday()) % 7
+                target_date = now - timedelta(days=days_diff)
+                return datetime(target_date.year, target_date.month, target_date.day, hour, minute)
+            
+            # 如果是完整日期格式 (YYYY年MM月DD日 HH:MM)
+            if re.match(r'^\d{4}年\d{2}月\d{2}日 \d{2}:\d{2}$', time_str):
+                return datetime.strptime(time_str, '%Y年%m月%d日 %H:%M')
+            
+            self.logger.warning(f"未知的时间格式: {time_str}")
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"解析时间失败: {time_str}, 错误: {e}")
+            return None
 
     def get_messages(self, last_time=None):
         """获取聊天消息"""
