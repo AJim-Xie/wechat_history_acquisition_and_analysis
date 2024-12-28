@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import re
 import logging
 import os
+import sys
 
 class WeChatMonitor:
     def __init__(self, log_path="logs", media_path="data/media"):
@@ -12,28 +13,39 @@ class WeChatMonitor:
         self.last_time = None
         auto.SetGlobalSearchTimeout(2)
         
+        # 获取程序运行路径
+        if getattr(sys, 'frozen', False):
+            # 打包后的路径
+            base_path = os.path.dirname(sys.executable)
+        else:
+            # 开发环境路径
+            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # 使用绝对路径
+        self.log_path = os.path.join(base_path, log_path)
+        self.media_path = os.path.join(base_path, media_path)
+        
         # 设置日志
-        os.makedirs(log_path, exist_ok=True)
+        os.makedirs(self.log_path, exist_ok=True)
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s [%(levelname)s] %(message)s',
             handlers=[
-                logging.FileHandler(f"{log_path}/wx_monitor.log", encoding='utf-8'),
+                logging.FileHandler(f"{self.log_path}/wx_monitor.log", encoding='utf-8'),
                 logging.StreamHandler()
             ]
         )
         self.logger = logging.getLogger(__name__)
         
         # 设置媒体文件存储路径
-        self.media_path = media_path
-        os.makedirs(media_path, exist_ok=True)
+        os.makedirs(self.media_path, exist_ok=True)
         for folder in ['images', 'videos', 'files']:
-            os.makedirs(f"{media_path}/{folder}", exist_ok=True)
+            os.makedirs(f"{self.media_path}/{folder}", exist_ok=True)
         
     def find_wechat(self):
         """查找微信主窗口"""
         try:
-            # 设置较短的超���时间
+            # 设置较短的超时时间
             auto.SetGlobalSearchTimeout(1.0)
             
             # 先尝试通过类名查找
@@ -284,7 +296,7 @@ class WeChatMonitor:
                             file_id = f"img_{int(time.time())}.jpg"
                             file_path = self._get_media_path(msg_type, file_id)
                             content = f"[图片]"
-                            self.logger.info(f"图片将保存���: {file_path}")
+                            self.logger.info(f"图片将保存至: {file_path}")
                             break
                         elif control_type == 50002:  # 视频控件类型
                             msg_type = 3
@@ -330,7 +342,7 @@ class WeChatMonitor:
             )
             
             if sender or content:  # 放宽条件，允许部分信息缺失
-                # 如果是未知发送者且内容是时间格式，则更新发送时间
+                # 如果找到未知发送者且内容是时间格式，则更新发送时间
                 if (sender == "未知发送者" or not sender) and is_time_message:
                     # 获取当前日期
                     current_date = datetime.now().date()
