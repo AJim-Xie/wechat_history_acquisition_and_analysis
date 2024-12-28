@@ -11,6 +11,8 @@ scikit-learn>=0.24.0
 
 # UI自动化
 uiautomation>=2.0.0
+pywin32>=303  # Windows系统API调用
+pygetwindow>=0.0.9  # 窗口管理
 
 # 数据处理
 sqlite3
