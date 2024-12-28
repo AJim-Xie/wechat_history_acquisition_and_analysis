@@ -91,7 +91,7 @@ def select_or_create_chat(db):
             chats = db.get_all_chats()
             if not chats:
                 print("\n当前没有已记录的聊天对象")
-                input("\n按回车键返回上级菜单...")
+                input("\n按回车键返回���级菜单...")
                 continue
             
             print("\n当前聊天对象列表：")
@@ -163,7 +163,7 @@ def show_dict_menu():
     """显示词典管理菜单"""
     print("\n=== 词典管理 ===")
     print("1. 查看词典内容")
-    print("2. 添���新词")
+    print("2. 添加新词")
     print("3. 删除词条")
     print("4. 更新词频")
     print("5. 备份词典")
@@ -180,6 +180,18 @@ def collect_data(monitor, db):
     if not chat:
         return
         
+    print(f"\n准备监控聊天: {chat['chat_name']}")
+    
+    # 确保微信窗口在前台
+    if not monitor.activate_window():
+        print("无法激活微信窗口，请确保微信已正常运行")
+        return
+    
+    # 自动打开聊天窗口
+    if not monitor.open_chat_by_name(chat['chat_name']):
+        print("无法自动打开聊天窗口，请手动打开后重试")
+        return
+    
     print(f"\n开始监控聊天: {chat['chat_name']}")
     
     # 获取最后一条消息的时间
@@ -202,7 +214,7 @@ def collect_data(monitor, db):
                 # 使用用户输入的名称或自动获取的名称
                 chat_id = db.get_chat_id(chat_title, chat['chat_type'], chat['chat_name'])
                 
-                # 保存��息，过滤未知发送者
+                # 保存息，过滤未知发送者
                 saved_count = 0
                 for msg in messages:
                     if msg['sender_name'] and msg['sender_name'].strip():
@@ -266,7 +278,7 @@ def analyze_data(analyzer, db, dict_manager):
                 if int(chat_choice) > 0 and int(chat_choice) <= len(chats):
                     chat_id = chats[int(chat_choice)-1]['chat_id']
             
-            # 选择时间��围
+            # 选择时间范围
             print("\n请选择分析时间范围：")
             print("1. 最近一周")
             print("2. 最近一月")
@@ -324,7 +336,7 @@ def analyze_data(analyzer, db, dict_manager):
             print("1. 时间维度（信息趋势、活跃时段）")
             print("2. 用户维度（发言排名、活跃度）")
             print("3. 内容维度（消息类型、关键词）")
-            print("4. ��组维度（成员互动、话题分析）")
+            print("4. 群组维度（成员互动、话题分析）")
             
             dimensions = input("\n请输入维度编号: ").split(',')
             dimensions = [d.strip() for d in dimensions if d.strip() in ['1', '2', '3', '4']]
@@ -354,7 +366,7 @@ def analyze_data(analyzer, db, dict_manager):
             print("\n请选择分析时间范围：")
             print("1. 最近一周")
             print("2. 最近一月")
-            print("3. 最近三���")
+            print("3. 最近三月")
             print("4. 自定义时间范围")
             
             time_choice = input("\n请选择(1-4): ")
@@ -469,7 +481,7 @@ def analyze_data(analyzer, db, dict_manager):
                     continue
             
             # 选择输出目录
-            output_dir = input("\n请输入分析结果保存路径（直接回车使用默认路径）: ").strip()
+            output_dir = input("\n请输入分析结果保存路径（直接回车使用默���路径）: ").strip()
             if not output_dir:
                 output_dir = "analysis_results"
             
@@ -821,7 +833,7 @@ def search_messages(analyzer):
         print("-" * 60)
 
 def main():
-    """主函数"""
+    """���函数"""
     # 初始化组件
     db = DatabaseHandler()
     monitor = WeChatMonitor()

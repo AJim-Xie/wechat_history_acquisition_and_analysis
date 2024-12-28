@@ -33,7 +33,7 @@ class WeChatMonitor:
     def find_wechat(self):
         """查找微信主窗口"""
         try:
-            # 设置较短的超时时间
+            # 设置较短的超���时间
             auto.SetGlobalSearchTimeout(1.0)
             
             # 先尝试通过类名查找
@@ -104,7 +104,7 @@ class WeChatMonitor:
                 # 查找群聊特征控件
                 group_features = [
                     ("ButtonControl", "查看全部群成员"),
-                    ("ButtonControl", "���聊名称"),
+                    ("ButtonControl", "群聊名称"),
                     ("TextControl", "群公告"),
                     ("ButtonControl", "群管理"),
                     ("ButtonControl", "全部群成员"),
@@ -284,7 +284,7 @@ class WeChatMonitor:
                             file_id = f"img_{int(time.time())}.jpg"
                             file_path = self._get_media_path(msg_type, file_id)
                             content = f"[图片]"
-                            self.logger.info(f"图片将保存至: {file_path}")
+                            self.logger.info(f"图片将保存���: {file_path}")
                             break
                         elif control_type == 50002:  # 视频控件类型
                             msg_type = 3
@@ -310,7 +310,7 @@ class WeChatMonitor:
                         elif control_type == 50005:  # 表情控件类型
                             msg_type = 6
                             content = "[表情]"
-                            self.logger.info(f"��测到表情消��")
+                            self.logger.info(f"检测到表情消息")
                             break
                         elif control_type == 50006:  # 转发消息控件类型
                             msg_type = 7
@@ -335,7 +335,7 @@ class WeChatMonitor:
                     # 获取当前日期
                     current_date = datetime.now().date()
                     
-                    # 解析时间���符串
+                    # 解析时间字符串
                     if re.match(r'^\d{1,2}:\d{2}$', content):
                         # 处理纯时间格式 (H:MM 或 HH:MM)
                         hour, minute = map(int, content.split(':'))
@@ -416,7 +416,7 @@ class WeChatMonitor:
             return []
         
         messages = []
-        message_hash_set = set()  # 用���消息去重
+        message_hash_set = set()  # 用消息去重
         
         try:
             # 获取消息列表区域
@@ -474,3 +474,95 @@ class WeChatMonitor:
         except Exception as e:
             self.logger.error(f"获取聊天标题失败: {e}")
             return None
+
+    def activate_window(self):
+        """检查微信窗口是否在前台，如果不在则激活"""
+        try:
+            if not self.wx_window:
+                self.find_wechat()
+                if not self.wx_window:
+                    self.logger.error("未找到微信窗口")
+                    return False
+            
+            # 检查窗口是否最小化
+            pattern = self.wx_window.GetWindowPattern()
+            if pattern and pattern.WindowVisualState == 2:  # 2表示最小化
+                self.logger.info("微信窗口已最小化，正在还原...")
+                self.wx_window.ShowWindow(1)  # 1表示正常显示
+                time.sleep(0.5)
+            
+            # 激活窗口
+            try:
+                # 尝试直接激活窗口
+                self.wx_window.SetActive()
+                time.sleep(0.5)
+                
+                # 确保窗口可见
+                if not self.wx_window.Exists():
+                    self.logger.error("窗口不可见")
+                    return False
+                    
+                # 移动鼠标到窗口中心以确保焦点
+                rect = self.wx_window.BoundingRectangle
+                center_x = (rect.left + rect.right) // 2
+                center_y = (rect.top + rect.bottom) // 2
+                auto.MoveTo(center_x, center_y)
+                time.sleep(0.2)
+                
+                return True
+                
+            except Exception as e:
+                self.logger.error(f"激活窗口时出错: {e}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"激活窗口失败: {e}")
+            return False
+
+    def open_chat_by_name(self, chat_name):
+        """通过名称打开指定的聊天窗口"""
+        try:
+            # 首先确保窗口在前台
+            if not self.activate_window():
+                return False
+            
+            # 1. 点击通讯录按钮
+            contact_btn = self.wx_window.ButtonControl(Name="通讯录")
+            if not contact_btn.Exists(maxSearchSeconds=2):
+                self.logger.error("未找到通讯录按钮")
+                return False
+            contact_btn.Click()
+            time.sleep(1)  # 等待通讯录加载
+            
+            # 2. 找到搜索框并输入聊天对象名称
+            search_box = self.wx_window.EditControl(Name="搜索")
+            if not search_box.Exists(maxSearchSeconds=2):
+                self.logger.error("未找到搜索框")
+                return False
+            
+            search_box.Click()
+            time.sleep(0.5)
+            auto.SendKeys(chat_name)
+            time.sleep(0.5)
+            auto.SendKeys('{Enter}')
+            time.sleep(1)  # 等待索结果
+            
+            # 3. 验证是否进入聊天界面
+            chat_name_control = self.wx_window.ButtonControl(Name="聊天信息")
+            if not chat_name_control.Exists(maxSearchSeconds=2):
+                self.logger.error("未能进入聊天界面")
+                return False
+            
+            # 4. 向上滚动8次
+            message_list = self.wx_window.ListControl(Name="消息")
+            if message_list.Exists(maxSearchSeconds=2):
+                for _ in range(8):
+                    message_list.WheelUp(wheelTimes=3)  # 每次滚动3个单位
+                    time.sleep(0.4)  # 等待消息加载
+            
+            self.logger.info(f"成功打开并滚动聊天窗口: {chat_name}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"打开聊天窗口失败: {e}")
+            return False
