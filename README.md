@@ -234,3 +234,27 @@ python export_tool.py
 - 导出文件默认路径设置
 - 配置实时生效
 - 自动保存配置
+
+## 打包EXE文件方法
+方法1：直接运行打包脚本
+build.bat
+方法2：手动执行打包命令
+pyinstaller --clean --onefile 
+--name "微信聊天记录分析工具" 
+--add-data "data;data" 
+--add-data "src;src" 
+--add-data "README.md;." 
+--add-data "requirements.txt;." 
+--hidden-import uiautomation 
+--hidden-import pandas 
+--hidden-import numpy 
+--hidden-import matplotlib 
+--hidden-import seaborn 
+--hidden-import jieba 
+--hidden-import wordcloud 
+--hidden-import networkx 
+--hidden-import sklearn.feature_extraction.text 
+--hidden-import sklearn.decomposition 
+--exclude-module paddle 
+--exclude-module paddlepaddle 
+main.py

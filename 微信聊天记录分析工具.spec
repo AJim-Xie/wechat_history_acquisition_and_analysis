@@ -5,12 +5,12 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=[('data', 'data'), ('src', 'src'), ('README.md', '.'), ('requirements.txt', '.')],
+    hiddenimports=['uiautomation', 'pandas', 'numpy', 'matplotlib', 'seaborn', 'jieba', 'wordcloud', 'networkx', 'sklearn.feature_extraction.text', 'sklearn.decomposition'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['paddle', 'paddlepaddle'],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
