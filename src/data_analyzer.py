@@ -1747,3 +1747,148 @@ class DataAnalyzer:
         except Exception as e:
             self.logger.error(f"词频分析失败: {str(e)}")
             raise 
+    
+    def generate_story(self, chat_id=None, start_time=None, end_time=None):
+        """根据时间线生成用户故事"""
+        try:
+            # 获取消息记录
+            messages = self._get_messages(chat_id, start_time, end_time)
+            if not messages:
+                raise ValueError("未找到符合条件的消息记录")
+            
+            # 按时间排序
+            messages.sort(key=lambda x: x['send_time'])
+            
+            # 初始化故事结构
+            story = {
+                'title': messages[0]['chat_name'],
+                'timeline': [],
+                'key_events': [],
+                'participants': set(),
+                'summary': ''
+            }
+            
+            # 提取关键信息
+            current_date = None
+            daily_messages = []
+            
+            for msg in messages:
+                # 记录参与者
+                story['participants'].add(msg['sender_name'])
+                
+                # 获取日期
+                msg_date = msg['send_time'].date()
+                
+                # 如果是新的一天，处理前一天的消息
+                if current_date and msg_date != current_date:
+                    # 分析当天的关键事件
+                    if daily_messages:
+                        key_event = self._extract_daily_key_event(daily_messages)
+                        if key_event:
+                            story['key_events'].append(key_event)
+                    daily_messages = []
+                
+                current_date = msg_date
+                daily_messages.append(msg)
+                
+                # 构建时间线条目
+                if msg['content'] and isinstance(msg['content'], str):
+                    # 清理消息内容
+                    content = re.sub(r'http[s]?://\S+', '[链接]', msg['content'])
+                    content = re.sub(r'\[.*?\]', '[表情]', content)
+                    content = content.strip()
+                    
+                    if content:
+                        timeline_entry = {
+                            'time': msg['send_time'].strftime('%Y-%m-%d %H:%M'),
+                            'sender': msg['sender_name'],
+                            'content': content,
+                            'type': msg['msg_type']
+                        }
+                        story['timeline'].append(timeline_entry)
+            
+            # 处理最后一天的消息
+            if daily_messages:
+                key_event = self._extract_daily_key_event(daily_messages)
+                if key_event:
+                    story['key_events'].append(key_event)
+            
+            # 生成故事摘要
+            story['summary'] = self._generate_story_summary(story)
+            
+            return story
+            
+        except Exception as e:
+            self.logger.error(f"生成用户故事失败: {str(e)}")
+            raise
+    
+    def _extract_daily_key_event(self, messages):
+        """提取每日关键事件"""
+        try:
+            # 提取当天所有文本
+            texts = []
+            for msg in messages:
+                if msg['content'] and isinstance(msg['content'], str):
+                    text = re.sub(r'http[s]?://\S+', '', msg['content'])
+                    text = re.sub(r'\[.*?\]', '', text)
+                    text = text.strip()
+                    if text:
+                        texts.append(text)
+            
+            if not texts:
+                return None
+            
+            # 使用TF-IDF提取关键词
+            keywords = jieba.analyse.extract_tags(
+                '\n'.join(texts),
+                topK=5,
+                withWeight=True,
+                allowPOS=('n', 'v', 'vn')  # 只保留名词和动词
+            )
+            
+            # 选择最具代表性的消息
+            representative_msg = None
+            max_keyword_count = 0
+            
+            for msg in messages:
+                if msg['content'] and isinstance(msg['content'], str):
+                    keyword_count = sum(1 for kw, _ in keywords if kw in msg['content'])
+                    if keyword_count > max_keyword_count:
+                        max_keyword_count = keyword_count
+                        representative_msg = msg
+            
+            if representative_msg:
+                return {
+                    'date': representative_msg['send_time'].strftime('%Y-%m-%d'),
+                    'content': representative_msg['content'],
+                    'keywords': [kw for kw, _ in keywords],
+                    'sender': representative_msg['sender_name']
+                }
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"提取日常关键事件失败: {str(e)}")
+            return None
+    
+    def _generate_story_summary(self, story):
+        """生成故事摘要"""
+        try:
+            summary_parts = []
+            
+            # 添加基本信息
+            summary_parts.append(f"这是一段关于「{story['title']}」的对话记录")
+            summary_parts.append(f"参与人数：{len(story['participants'])}")
+            summary_parts.append(f"时间跨度：{story['timeline'][0]['time']} 至 {story['timeline'][-1]['time']}")
+            
+            # 添加关键事件概述
+            if story['key_events']:
+                summary_parts.append("\n主要事件：")
+                for event in story['key_events']:
+                    summary_parts.append(f"- {event['date']}: {event['content'][:50]}...")
+            
+            return "\n".join(summary_parts)
+            
+        except Exception as e:
+            self.logger.error(f"生成故事摘要失败: {str(e)}")
+            return "无法生成摘要" 

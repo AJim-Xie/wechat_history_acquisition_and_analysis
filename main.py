@@ -91,7 +91,7 @@ def select_or_create_chat(db):
             chats = db.get_all_chats()
             if not chats:
                 print("\n当前没有已记录的聊天对象")
-                input("\n按回车键返回���级菜单...")
+                input("\n按回车键返回上级菜单...")
                 continue
             
             print("\n当前聊天对象列表：")
@@ -236,7 +236,7 @@ def collect_data(monitor, db):
                 return
             
     except KeyboardInterrupt:
-        print("\n���止监控")
+        print("\n停止监控")
 
 def analyze_data(analyzer, db, dict_manager):
     """数据分析功能"""
@@ -247,9 +247,10 @@ def analyze_data(analyzer, db, dict_manager):
         print("3. 可视化分析")
         print("4. 词频分析")
         print("5. 生成思维导图")
+        print("6. 生成聊天故事")
         print("0. 返回主菜单")
         
-        choice = input("\n请选择功能(0-5): ")
+        choice = input("\n请选择功能(0-6): ")
         
         if choice == '0':
             break
@@ -472,7 +473,97 @@ def analyze_data(analyzer, db, dict_manager):
                 print(f"分析失败: {e}")
             
         elif choice == '6':
-            search_messages(analyzer)
+            print("\n=== 生成聊天故事 ===")
+            
+            # 选择聊天对象
+            chats = analyzer.db.get_all_chats()
+            if not chats:
+                print("没有可用的聊天记录")
+                continue
+                
+            print("\n可用的聊天列表：")
+            for i, chat in enumerate(chats, 1):
+                chat_type = '群聊' if chat['chat_type'] == 2 else '私聊'
+                chat_name = chat['chat_name'].replace('聊天信息', '')
+                print(f"{i}. {chat_name} ({chat_type})")
+            
+            chat_choice = input("\n请选择聊天序号: ")
+            chat_id = None
+            if chat_choice.isdigit():
+                if int(chat_choice) > 0 and int(chat_choice) <= len(chats):
+                    chat_id = chats[int(chat_choice)-1]['chat_id']
+            
+            # 选择时间范围
+            print("\n请选择分析时间范围：")
+            print("1. 最近一周")
+            print("2. 最近一月")
+            print("3. 最近三月")
+            print("4. 自定义时间范围")
+            
+            time_choice = input("\n请选择(1-4): ")
+            start_time = None
+            end_time = None
+            
+            if time_choice in ['1', '2', '3']:
+                days = {'1': 7, '2': 30, '3': 90}[time_choice]
+                start_time = datetime.now() - timedelta(days=days)
+            elif time_choice == '4':
+                start_date = input("开始日期(YYYY-MM-DD): ")
+                end_date = input("结束日期(YYYY-MM-DD): ")
+                try:
+                    start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
+                    end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    print("日期格式错误")
+                    continue
+            
+            # 选择输出目录
+            output_dir = input("\n请输入故事保存路径（直接回车使用默认路径）: ").strip()
+            if not output_dir:
+                output_dir = "analysis_results"
+            
+            try:
+                story = analyzer.generate_story(
+                    chat_id=chat_id,
+                    start_time=start_time,
+                    end_time=end_time
+                )
+                
+                if story:
+                    # 保存故事到文件
+                    os.makedirs(output_dir, exist_ok=True)
+                    output_file = os.path.join(output_dir, f"chat_story_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt")
+                    
+                    with open(output_file, 'w', encoding='utf-8') as f:
+                        # 写入标题
+                        f.write(f"=== {story['title']} 的聊天故事 ===\n\n")
+                        
+                        # 写入基本信息
+                        f.write(f"参与者：{', '.join(story['participants'])}\n")
+                        f.write(f"时间范围：{story['timeline'][0]['time']} 至 {story['timeline'][-1]['time']}\n\n")
+                        
+                        # 写入故事摘要
+                        f.write("【故事摘要】\n")
+                        f.write(story['summary'])
+                        f.write("\n\n")
+                        
+                        # 写入关键事件
+                        f.write("【关键事件】\n")
+                        for event in story['key_events']:
+                            f.write(f"{event['date']}: {event['content']}\n")
+                        f.write("\n")
+                        
+                        # 写入详细时间线
+                        f.write("【详细时间线】\n")
+                        for entry in story['timeline']:
+                            f.write(f"[{entry['time']}] {entry['sender']}: {entry['content']}\n")
+                    
+                    print(f"\n故事已生成并保存到：{output_file}")
+                else:
+                    print("\n无法生成故事，可能是消息记录不足")
+                    
+            except Exception as e:
+                print(f"生成故事失败: {e}")
         
         input("\n按回车键继续...")
 
@@ -555,7 +646,7 @@ def clean_data(analyzer):
             
             try:
                 before_date = datetime.strptime(date_str, '%Y-%m-%d')
-                # 预览将要清��的数据
+                # 预览将要清理的数据
                 preview = analyzer.preview_clean_data(before_date=before_date)
                 
                 print("\n=== 清理预览 ===")
@@ -687,7 +778,7 @@ def manage_dict(dict_manager, db):
         
         elif choice == '7':
             # 合并词典
-            other_dict = input("请输入要合并��词典文件路径: ")
+            other_dict = input("请输入要合并的词典文件路径: ")
             print("\n请选择合并策略：")
             print("1. 取最大词频")
             print("2. 取最小词频")
