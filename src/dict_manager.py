@@ -77,17 +77,26 @@ class DictManager:
         except Exception as e:
             return False, f"验证词典时出错: {e}"
     
-    def add_word(self, word, freq, pos=None):
-        """添加新词条"""
+    def add_word(self, word, freq=500, pos=None):
+        """添加新词到词典"""
         try:
+            if self.has_word(word):
+                return False, "词语已存在"
+                
+            # 构建词条
+            entry = f"{word} {freq}"
+            if pos:
+                entry += f" {pos}"
+                
+            # 添加到词典
             with open(self.dict_path, 'a', encoding='utf-8') as f:
-                line = f"{word} {freq}"
-                if pos:
-                    line += f" {pos}"
-                f.write(line + '\n')
+                f.write(f"\n{entry}")
+                
             return True, "添加成功"
+            
         except Exception as e:
-            return False, f"添加词条失败: {e}"
+            self.logger.error(f"添加词语失败: {e}")
+            return False, f"添加失败: {e}"
     
     def remove_word(self, word):
         """删除词条"""
@@ -377,4 +386,41 @@ class DictManager:
             return True, f"可视化结果已保存到 {output_dir} 目录"
             
         except Exception as e:
-            return False, f"生成可视化失败: {e}" 
+            return False, f"生成可视化失败: {e}"
+    
+    def has_word(self, word):
+        """检查词典中是否存在指定词语"""
+        try:
+            with open(self.dict_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        parts = line.split()
+                        if parts[0] == word:
+                            return True
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"检查词语是否存在失败: {e}")
+            return False
+            
+    def add_word(self, word, freq=500, pos=None):
+        """添加新词到词典"""
+        try:
+            if self.has_word(word):
+                return False, "词语已存在"
+                
+            # 构建词条
+            entry = f"{word} {freq}"
+            if pos:
+                entry += f" {pos}"
+                
+            # 添加到词典
+            with open(self.dict_path, 'a', encoding='utf-8') as f:
+                f.write(f"\n{entry}")
+                
+            return True, "添加成功"
+            
+        except Exception as e:
+            self.logger.error(f"添加词语失败: {e}")
+            return False, f"添加失败: {e}" 

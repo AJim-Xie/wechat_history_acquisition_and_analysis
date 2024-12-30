@@ -1012,6 +1012,15 @@ class DataAnalyzer:
             if not texts:
                 raise ValueError("没有可分析的文本内容")
             
+            # 1. 提取高频短语和专业术语
+            phrase_patterns = self._extract_frequent_phrases(texts)
+            
+            # 2. 动态更新自定义词典
+            self._update_custom_dict(texts, dict_manager)
+            
+            # 3. 使用多种算法提取关键词
+            keywords = self._extract_keywords_multi_algorithm(texts)
+            
             # 创建思维导图
             dot = graphviz.Digraph(comment='Chat Content Mind Map', encoding='utf-8')
             dot.attr(rankdir='TB')
@@ -1024,13 +1033,6 @@ class DataAnalyzer:
             # 添加根节点（聊天名称）
             chat_name = messages[0]['chat_name']
             dot.node('root', chat_name, fillcolor='#e3f2fd')
-            
-            # 提取高频词和典型消息
-            keywords = jieba.analyse.textrank(
-                '\n'.join(texts),
-                topK=10,
-                allowPOS=('ns', 'n', 'vn', 'v', 'nr')
-            )
             
             # 添加高频词分支
             dot.node('keywords', '高频词', fillcolor='#f3e5f5')
@@ -1073,6 +1075,197 @@ class DataAnalyzer:
         except Exception as e:
             self.logger.error(f"生成思维导图失败: {str(e)}")
             raise ValueError(f"生成失败: {str(e)}")
+    
+    def _extract_frequent_phrases(self, texts, min_freq=3):
+        """提取高频短语"""
+        try:
+            # 使用正则表达式匹配可能的短语模式
+            patterns = {
+                '专业术语': r'[a-zA-Z0-9\u4e00-\u9fa5]{2,8}(?:系统|平台|设备|技术|方案|模块|功能|服务|数据)',
+                '时间词组': r'(?:上午|下午|凌晨|晚上)?\d{1,2}[:|：]\d{1,2}',
+                '数字单位': r'\d+(?:年|月|日|天|个|次|台|件|kg|吨|千克)',
+                '专有名词': r'(?:[A-Z][a-z]+){2,}|[A-Z]{2,}',
+            }
+            
+            phrases = defaultdict(int)
+            for text in texts:
+                for pattern_type, pattern in patterns.items():
+                    matches = re.finditer(pattern, text)
+                    for match in matches:
+                        phrase = match.group()
+                        phrases[phrase] += 1
+            
+            # 过滤低频短语
+            frequent_phrases = {p: f for p, f in phrases.items() if f >= min_freq}
+            return frequent_phrases
+            
+        except Exception as e:
+            self.logger.error(f"提取高频短语失败: {str(e)}")
+            return {}
+    
+    def _update_custom_dict(self, texts, dict_manager):
+        """动态更新自定义词典"""
+        try:
+            # 1. 统计词频
+            word_freq = defaultdict(int)
+            for text in texts:
+                words = jieba.cut(text)
+                for word in words:
+                    word_freq[word] += 1
+            
+            # 2. 使用统计信息识别新词
+            new_words = set()
+            for i in range(len(texts)):
+                for j in range(i+1, len(texts)):
+                    common_substrings = self._find_common_substrings(texts[i], texts[j])
+                    for substr in common_substrings:
+                        if len(substr) >= 2 and word_freq[substr] >= 3:
+                            new_words.add(substr)
+            
+            # 3. 更新词典
+            for word in new_words:
+                if not dict_manager.has_word(word):
+                    dict_manager.add_word(word, word_freq[word])
+            
+        except Exception as e:
+            self.logger.error(f"更新自定义词典失败: {str(e)}")
+    
+    def _extract_keywords_multi_algorithm(self, texts, top_k=20):
+        """使用多种算法提取关键词"""
+        try:
+            # 1. 预处理文本
+            processed_texts = []
+            for text in texts:
+                # 移除特殊字符和标点
+                text = re.sub(r'[^\u4e00-\u9fa5a-zA-Z0-9]', ' ', text)
+                text = re.sub(r'\s+', ' ', text).strip()
+                if text:
+                    processed_texts.append(text)
+            
+            combined_text = '\n'.join(processed_texts)
+            
+            # 定义要保留的词性
+            valid_pos = {
+                'n',    # 名词
+                'nr',   # 人名
+                'ns',   # 地名
+                'nt',   # 机构名
+                'nz',   # 其他专名
+                'v',    # 动词
+                'vn',   # 动名词
+            }
+            
+            # 2. 使用多种分词算法
+            # 2.1 TF-IDF
+            tfidf_keywords = set(jieba.analyse.extract_tags(
+                combined_text,
+                topK=top_k * 2,
+                withWeight=True,
+                allowPOS=tuple(valid_pos)  # 只允许特定词性
+            ))
+            
+            # 2.2 TextRank
+            textrank_keywords = set(jieba.analyse.textrank(
+                combined_text,
+                topK=top_k * 2,
+                withWeight=True,
+                allowPOS=tuple(valid_pos)  # 只允许特定词性
+            ))
+            
+            # 2.3 基于词频和词性的分析
+            words_with_flags = []
+            for text in processed_texts:
+                # 只保留指定词性的词
+                words = jieba.posseg.cut(text)
+                words_with_flags.extend([(word, flag) for word, flag in words if flag in valid_pos])
+            
+            # 统计词频和词性
+            word_stats = defaultdict(lambda: {'freq': 0, 'pos': defaultdict(int)})
+            for word, flag in words_with_flags:
+                if len(word) >= 2:  # 只考虑长度大于等于2的词
+                    word_stats[word]['freq'] += 1
+                    word_stats[word]['pos'][flag] += 1
+            
+            # 3. 融合多种算法结果
+            keyword_scores = defaultdict(float)
+            
+            # 3.1 添加TF-IDF权重
+            for word, weight in tfidf_keywords:
+                keyword_scores[word] += weight * 0.4
+            
+            # 3.2 添加TextRank权重
+            for word, weight in textrank_keywords:
+                keyword_scores[word] += weight * 0.3
+            
+            # 3.3 添加词频权重
+            max_freq = max((stats['freq'] for stats in word_stats.values()), default=1)
+            for word, stats in word_stats.items():
+                freq_score = stats['freq'] / max_freq
+                keyword_scores[word] += freq_score * 0.3
+            
+            # 4. 选择最终关键词
+            sorted_keywords = sorted(keyword_scores.items(), key=lambda x: x[1], reverse=True)
+            return [word for word, _ in sorted_keywords[:top_k]]
+            
+        except Exception as e:
+            self.logger.error(f"关键词提取失败: {str(e)}")
+            return []
+    
+    def _calculate_context_relevance(self, word, texts, window_size=5):
+        """计算词语的上下文相关性"""
+        try:
+            # 统计共现词
+            cooccurrence = defaultdict(int)
+            total_windows = 0
+            
+            for text in texts:
+                words = list(jieba.cut(text))
+                for i, w in enumerate(words):
+                    if w == word:
+                        # 获取窗口范围内的词
+                        start = max(0, i - window_size)
+                        end = min(len(words), i + window_size + 1)
+                        window_words = words[start:i] + words[i+1:end]
+                        
+                        for context_word in window_words:
+                            if len(context_word) >= 2:  # 只考虑长度大于等于2的词
+                                cooccurrence[context_word] += 1
+                        total_windows += 1
+            
+            if not total_windows:
+                return 0
+            
+            # 计算上下文相关性得分
+            max_cooccurrence = max(cooccurrence.values()) if cooccurrence else 1
+            context_score = sum(count / max_cooccurrence for count in cooccurrence.values())
+            return min(1.0, context_score / (2 * window_size))  # 归一化到[0,1]范围
+            
+        except Exception as e:
+            self.logger.error(f"计算上下文相关性失败: {str(e)}")
+            return 0
+    
+    def _find_common_substrings(self, str1, str2, min_length=2):
+        """查找两个字符串的公共子串"""
+        common = set()
+        for i in range(len(str1)-min_length+1):
+            for j in range(i+min_length, len(str1)+1):
+                substr = str1[i:j]
+                if substr in str2 and len(substr) >= min_length:
+                    common.add(substr)
+        return common
+    
+    def _get_high_freq_words(self, texts, top_k=20):
+        """获取高频词"""
+        word_freq = defaultdict(int)
+        for text in texts:
+            words = jieba.cut(text)
+            for word in words:
+                if len(word) >= 2:  # 只统计长度大于等于2的词
+                    word_freq[word] += 1
+        
+        return set([word for word, _ in sorted(word_freq.items(), 
+                                             key=lambda x: x[1], 
+                                             reverse=True)[:top_k]])
     
     def _get_time_distribution(self, messages):
         """获取消息的时间分布统计"""
