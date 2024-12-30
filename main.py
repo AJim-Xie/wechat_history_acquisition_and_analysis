@@ -136,7 +136,8 @@ def show_collection_menu():
     print("1. 选择已有聊天对象")
     print("2. 新增聊天对象")
     print("0. 返回主菜单")
-    return input("\n请选择操作(0-2): ")
+    print("q. 退出程序")
+    return input("\n请选择操作(0-2,q): ")
 
 def show_analysis_menu():
     """显示数据分析菜单"""
@@ -157,7 +158,8 @@ def show_export_menu():
     print("2. 按时间范围导出")
     print("3. 按聊天对象导出")
     print("0. 返回主菜单")
-    return input("\n请选择操作(0-3): ")
+    print("q. 退出程序")
+    return input("\n请选择操作(0-3,q): ")
 
 def show_dict_menu():
     """显示词典管理菜单"""
@@ -171,72 +173,80 @@ def show_dict_menu():
     print("7. 合并词典")
     print("8. 词典可视化")
     print("0. 返回主菜单")
-    return input("\n请选择操作(0-8): ")
+    print("q. 退出程序")
+    return input("\n请选择操作(0-8,q): ")
 
 def collect_data(monitor, db):
-    """收集聊天数据"""
-    # 获取聊天对象
-    chat = select_or_create_chat(db)
-    if not chat:
-        return
+    """数据采集功能"""
+    while True:
+        choice = show_collection_menu()
         
-    print(f"\n准备监控聊天: {chat['chat_name']}")
-    
-    # 确保微信窗口在前台
-    if not monitor.activate_window():
-        print("无法激活微信窗口，请确保微信已正常运行")
-        return
-    
-    # 自动打开聊天窗口
-    if not monitor.open_chat_by_name(chat['chat_name']):
-        print("无法自动打开聊天窗口，请手动打开后重试")
-        return
-    
-    print(f"\n开始监控聊天: {chat['chat_name']}")
-    
-    # 获取最后一条消息的时间
-    last_time = db.get_last_message_time(chat['chat_id'])
-    if last_time:
-        print(f"将从 {last_time} 开始获取新消息")
-    
-    try:
-        while True:
-            # 获取当前聊天窗口标题
-            chat_title = monitor.get_chat_title()
-            if not chat_title:
-                print("未检测到聊天窗口，请确保正确的聊天窗口处于活动状态")
-                time.sleep(2)
-                continue
+        if choice.lower() == 'q':
+            print("\n感谢使用,再见!")
+            sys.exit(0)
             
-            # 获取新消息
-            messages = monitor.get_messages(last_time)
-            if messages:
-                # 使用用户输入的名称或自动获取的名称
-                chat_id = db.get_chat_id(chat_title, chat['chat_type'], chat['chat_name'])
+        # 获取聊天对象
+        chat = select_or_create_chat(db)
+        if not chat:
+            return
+        
+        print(f"\n准备监控聊天: {chat['chat_name']}")
+        
+        # 确保微信窗口在前台
+        if not monitor.activate_window():
+            print("无法激活微信窗口，请确保微信已正常运行")
+            return
+        
+        # 自动打开聊天窗口
+        if not monitor.open_chat_by_name(chat['chat_name']):
+            print("无法自动打开聊天窗口，请手动打开后重试")
+            return
+        
+        print(f"\n开始监控聊天: {chat['chat_name']}")
+        
+        # 获取最后一条消息的时间
+        last_time = db.get_last_message_time(chat['chat_id'])
+        if last_time:
+            print(f"将从 {last_time} 开始获取新消息")
+        
+        try:
+            while True:
+                # 获取当前聊天窗口标题
+                chat_title = monitor.get_chat_title()
+                if not chat_title:
+                    print("未检测到聊天窗口，请确保正确的聊天窗口处于活动状态")
+                    time.sleep(2)
+                    continue
                 
-                # 保存息，过滤未知发送者
-                saved_count = 0
-                for msg in messages:
-                    if msg['sender_name'] and msg['sender_name'].strip():
-                        db.save_message(chat_id, msg)
-                        last_time = msg['send_time']
-                        saved_count += 1
-                print(f"已保存 {saved_count} 条新消息")
-                if saved_count < len(messages):
-                    print(f"已过滤 {len(messages) - saved_count} 条未知发送者的消息")
-            else:
-                print("本次扫描未发现新消息")
-            
-            time.sleep(1)  # 等待1秒
-            
-            # 每次扫描后询问用户是否继续
-            choice = input("\n是否继续获取消息？(y/n): ")
-            if choice.lower() != 'y':
-                print("\n停止获取消息")
-                return
-            
-    except KeyboardInterrupt:
-        print("\n停止监控")
+                # 获取新消息
+                messages = monitor.get_messages(last_time)
+                if messages:
+                    # 使用用户输入的名称或自动获取的名称
+                    chat_id = db.get_chat_id(chat_title, chat['chat_type'], chat['chat_name'])
+                    
+                    # 保存息，过滤未知发送者
+                    saved_count = 0
+                    for msg in messages:
+                        if msg['sender_name'] and msg['sender_name'].strip():
+                            db.save_message(chat_id, msg)
+                            last_time = msg['send_time']
+                            saved_count += 1
+                    print(f"已保存 {saved_count} 条新消息")
+                    if saved_count < len(messages):
+                        print(f"已过滤 {len(messages) - saved_count} 条未知发送者的消息")
+                else:
+                    print("本次扫描未发现新消息")
+                
+                time.sleep(1)  # 等待1秒
+                
+                # 每次扫描后询问用户是否继续
+                choice = input("\n是否继续获取消息？(y/n): ")
+                if choice.lower() != 'y':
+                    print("\n停止获取消息")
+                    return
+                
+        except KeyboardInterrupt:
+            print("\n停止监控")
 
 def analyze_data(analyzer, db, dict_manager):
     """数据分析功能"""
@@ -249,10 +259,15 @@ def analyze_data(analyzer, db, dict_manager):
         print("5. 生成思维导图")
         print("6. 生成聊天故事")
         print("0. 返回主菜单")
+        print("q. 退出程序")
         
-        choice = input("\n请选择功能(0-6): ")
+        choice = input("\n请选择功能(0-6,q): ")
         
-        if choice == '0':
+        if choice.lower() == 'q':
+            print("\n感谢使用,再见!")
+            sys.exit(0)
+            
+        elif choice == '0':
             break
             
         elif choice == '4':  # 词频分析
@@ -394,8 +409,22 @@ def analyze_data(analyzer, db, dict_manager):
             print(f"活跃用户数: {stats['user_count']}")
             
         elif choice == '2':
-            # 导出聊天记录
-            export_data(analyzer)
+            print("\n=== 导出聊天记录 ===")
+            # 获取默认导出路径
+            default_path = os.path.join(os.path.expanduser('~'), 'Documents', 'WeChatExport')
+            os.makedirs(default_path, exist_ok=True)
+            
+            output_dir = input(f"\n请输入导出目录(直接回车使用默认路径 {default_path}): ").strip()
+            if not output_dir:
+                output_dir = default_path
+            
+            try:
+                # 导出聊天记录
+                analyzer.export_all(output_dir, True)
+                print(f"\n聊天记录已导出到: {output_dir}")
+                
+            except Exception as e:
+                print(f"导出失败: {e}")
             
         elif choice == '3':
             # 可视化分析
@@ -572,58 +601,28 @@ def export_data(analyzer):
     while True:
         choice = show_export_menu()
         
+        if choice.lower() == 'q':
+            print("\n感谢使用,再见!")
+            sys.exit(0)
+            
         if choice == '0':
-            return
+            break
             
-        export_path = input("\n请输入导出文件路径: ")
-        if not export_path:
-            print("路径不能为空")
-            continue
-            
-        format_choice = input("请选择导出格式(1:CSV 2:JSON): ")
-        if format_choice not in ['1', '2']:
-            print("无效的格式选择")
-            continue
-            
-        try:
-            if choice == '1':
-                # 导出全部数据
-                analyzer.export_all(export_path, format_choice == '1')
-                
-            elif choice == '2':
-                # 按时间范围导出
-                start_date = input("请输入开始日期(YYYY-MM-DD): ")
-                end_date = input("请输入结束日期(YYYY-MM-DD): ")
-                analyzer.export_by_time(export_path, start_date, end_date, format_choice == '1')
-                
-            elif choice == '3':
-                # 按聊天对象导出
-                chats = analyzer.get_all_chats()
-                if not chats:
-                    print("没有可用的聊天记录")
-                    continue
-                    
-                print("\n可用的聊天列表：")
-                for i, chat in enumerate(chats, 1):
-                    print(f"{i}. {chat['chat_name']}")
-                
-                chat_choice = input("\n请选择聊天序号: ")
-                if not chat_choice.isdigit() or not (0 < int(chat_choice) <= len(chats)):
-                    print("无效的选择")
-                    continue
-                    
-                analyzer.export_by_chat(
-                    export_path, 
-                    chats[int(chat_choice)-1]['chat_id'],
-                    format_choice == '1'
-                )
-            
-            print(f"\n数据已导出到: {export_path}")
-            
-        except Exception as e:
-            print(f"导出失败: {e}")
+        # 获取默认导出路径 - 改为项目目录下的 exports 子目录
+        default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exports')
+        os.makedirs(default_path, exist_ok=True)
         
-        input("\n按回车键继续...")
+        if choice == '1':
+            # 导出全部数据
+            output_path = input(f"\n请输入导出文件路径(直接回车使用默认路径 {default_path}): ").strip()
+            if not output_path:
+                output_path = default_path
+                
+            try:
+                analyzer.export_all(output_path)
+                print(f"\n数据已导出到: {output_path}")
+            except Exception as e:
+                print(f"导出失败: {e}")
 
 def clean_data(analyzer):
     """数据清理功能"""
@@ -712,7 +711,11 @@ def manage_dict(dict_manager, db):
     while True:
         choice = show_dict_menu()
         
-        if choice == '0':
+        if choice.lower() == 'q':
+            print("\n感谢使用,再见!")
+            sys.exit(0)
+            
+        elif choice == '0':
             return
             
         elif choice == '1':
@@ -900,6 +903,13 @@ def main():
     if not monitor.find_wechat():
         print("未找到微信窗口，请确保微信已登录")
         return
+    
+    print("\n=== 配置选项 ===")
+    scroll_input = input("请输入最大滚动次数(直接回车使用默认值5): ").strip()
+    max_scroll = int(scroll_input) if scroll_input.isdigit() else None
+    
+    # 使用 monitor 而不是创建新的 controller
+    monitor.max_scroll = max_scroll  # 设置滚动次数
     
     while True:
         choice = show_main_menu()

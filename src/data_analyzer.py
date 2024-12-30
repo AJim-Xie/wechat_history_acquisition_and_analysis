@@ -1397,23 +1397,38 @@ class DataAnalyzer:
             
             for row in cursor.fetchall():
                 try:
-                    # 尝试多种时间格式
+                    # 尝试解析时间
                     send_time = None
+                    time_str = row[3]
+                    
+                    # 标准化时间字符串格式
+                    time_str = time_str.replace('/', '-')  # 将斜杠替换为横杠
+                    
+                    # 处理年份缩写
+                    if len(time_str) >= 2 and time_str[2] == '-':  # 如果年份是缩写格式(如 24-12-18)
+                        time_str = '20' + time_str  # 添加世纪前缀
+                    
+                    # 支持更多时间格式
                     time_formats = [
-                        '%Y-%m-%d %H:%M:%S.%f',
-                        '%Y-%m-%d %H:%M:%S',
-                        '%Y-%m-%d %H:%M'
+                        '%Y-%m-%d %H:%M:%S.%f',  # 2024-12-18 09:09:00.000
+                        '%Y-%m-%d %H:%M:%S',     # 2024-12-18 09:09:00
+                        '%Y-%m-%d %H:%M',        # 2024-12-18 09:09
+                        '%Y-%m-%d %H:%M:%S',     # 2024/12/18 09:09:00
+                        '%Y-%m-%d %H:%M',        # 2024/12/18 09:09
+                        '%Y-%m-%d %I:%M %p'      # 2024-12-18 09:09 AM/PM
                     ]
                     
+                    # 尝试所有可能的时间格式
                     for fmt in time_formats:
                         try:
-                            send_time = datetime.strptime(row[3], fmt)
+                            send_time = datetime.strptime(time_str, fmt)
                             break
                         except ValueError:
                             continue
                     
                     if send_time is None:
-                        self.logger.warning(f"无法解析时间格式: {row[3]}")
+                        self.logger.warning(f"无法解析时间格式: {row[3]} -> {time_str}")
+                        # 如果无法解析，跳过该消息
                         continue
                     
                     messages.append({
@@ -1426,15 +1441,13 @@ class DataAnalyzer:
                     })
                     
                 except Exception as e:
-                    self.logger.warning(f"处理消息记录失败: {str(e)}")
+                    self.logger.warning(f"处理消息记录失败: {str(e)}, 原始时间: {row[3]}")
                     continue
                 
-            cursor.close()
-            conn.close()
             return messages
             
         except Exception as e:
-            self.logger.error(f"获取聊天记录失败: {str(e)}")
+            self.logger.error(f"获取消息记录失败: {str(e)}")
             raise
     
     def _get_chat_name(self, chat_id):
