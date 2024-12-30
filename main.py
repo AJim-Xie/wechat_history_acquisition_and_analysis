@@ -121,7 +121,7 @@ def select_or_create_chat(db):
 def show_main_menu():
     """显示主菜单"""
     print("\n=== 微信聊天记录分析工具 ===")
-    print("1. 采集聊天记录")
+    print("1. 采集数据")
     print("2. 数据分析")
     print("3. 数据导出")
     print("4. 数据清理")
@@ -494,7 +494,7 @@ def analyze_data(analyzer, db, dict_manager):
         
         input("\n按回车键继续...")
 
-def export_data(analyzer):
+def export_data(analyzer, export_path=None):
     """数据导出功能"""
     while True:
         choice = show_export_menu()
@@ -506,39 +506,29 @@ def export_data(analyzer):
         if choice == '0':
             break
             
-        # 获取默认导出路径
-        default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exports')
-        os.makedirs(default_path, exist_ok=True)
-        
-        if choice in ['1', '2']:  # 全部导出或按时间范围导出
+        try:
             # 选择导出格式
-            print("\n请选择导出格式：")
-            print("1. CSV")
-            print("2. JSON")
-            format_choice = input("\n请选择(1-2): ").strip()
-            format_type = 'csv' if format_choice == '1' else 'json'
+            format_type = input("\n请选择导出格式(1:CSV 2:JSON): ").strip()
+            format_type = 'csv' if format_type == '1' else 'json'
             
-            # 获取导出路径
-            output_path = input(f"\n请输入导出文件路径(直接回车使用默认路径 {default_path}): ").strip()
-            if not output_path:
-                output_path = default_path
+            # 使用配置的导出路径或默认路径
+            output_path = export_path or os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exports')
+            os.makedirs(output_path, exist_ok=True)
+            
+            # 获取时间范围
+            start_time, end_time = get_time_range()
+            
+            # 执行导出
+            analyzer.export_chat(
+                output_path,
+                start_time=start_time,
+                end_time=end_time,
+                format=format_type
+            )
+            print(f"\n数据已导出到: {output_path}")
                 
-            try:
-                if choice == '1':  # 导出全部数据
-                    analyzer.export_chat(output_path, format=format_type)
-                    print(f"\n数据已导出到: {output_path}")
-                else:  # 按时间范围导出
-                    start_time, end_time = get_time_range()
-                    analyzer.export_chat(
-                        output_path,
-                        start_time=start_time,
-                        end_time=end_time,
-                        format=format_type
-                    )
-                    print(f"\n数据已导出到: {output_path}")
-                        
-            except Exception as e:
-                print(f"导出失败: {e}")
+        except Exception as e:
+            print(f"导出失败: {e}")
 
 def clean_data(analyzer):
     """数据清理功能"""
@@ -851,47 +841,75 @@ def manage_config(config):
 
 def main():
     """主函数"""
+    # 延迟导入，提升启动速度
+    from src.db_handler import DatabaseHandler
+    from src.wx_monitor import WeChatMonitor
+    from src.data_analyzer import DataAnalyzer
+    from src.dict_manager import DictManager
+    
     # 初始化配置
     config = {
-        'max_scroll': 5,  # 默认最大滚动次数
-        'export_path': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exports')  # 默认导出路径
+        'max_scroll': 5,
+        'export_path': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exports')
     }
     
-    # 初始化组件
-    db = DatabaseHandler()
-    monitor = WeChatMonitor()
-    monitor.max_scroll = config['max_scroll']
-    analyzer = DataAnalyzer(db)
-    dict_manager = DictManager()
+    # 懒加载组件
+    db = None
+    monitor = None
+    analyzer = None
+    dict_manager = None
     
-    # 查找微信窗口
-    if not monitor.find_wechat():
-        print("未找到微信窗口，请确保微信已登录")
-        return
+    def init_components():
+        """按需初始化组件"""
+        nonlocal db, monitor, analyzer, dict_manager
+        if db is None:
+            db = DatabaseHandler()
+        if monitor is None:
+            monitor = WeChatMonitor()
+            monitor.max_scroll = config['max_scroll']
+        if analyzer is None:
+            analyzer = DataAnalyzer(db)
+        if dict_manager is None:
+            dict_manager = DictManager()
     
     while True:
-        choice = show_main_menu()
-        
-        if choice == '0':
-            break
-        elif choice == '1':
-            collect_data(monitor, db)
-        elif choice == '2':
-            analyze_data(analyzer, db, dict_manager)
-        elif choice == '3':
-            export_data(analyzer, config['export_path'])
-        elif choice == '4':
-            clean_data(analyzer)
-        elif choice == '5':
-            manage_dict(dict_manager, db)
-        elif choice == '6':
-            search_messages(analyzer)
-        elif choice == '7':
-            manage_config(config)
-            # 更新监控器的滚动次数
-            monitor.max_scroll = config['max_scroll']
-        else:
-            print("无效的选择")
+        try:
+            choice = show_main_menu()
+            
+            if choice == '0':
+                break
+                
+            # 根据用户选择初始化需要的组件
+            if choice in ['1', '2', '3', '4', '5', '6']:
+                init_components()
+                
+                if choice == '1':
+                    # 检查微信窗口
+                    if not monitor.find_wechat():
+                        print("未找到微信窗口，请确保微信已登录")
+                        continue
+                    collect_data(monitor, db)
+                elif choice == '2':
+                    analyze_data(analyzer, db, dict_manager)
+                elif choice == '3':
+                    export_data(analyzer, config['export_path'])
+                elif choice == '4':
+                    clean_data(analyzer)
+                elif choice == '5':
+                    manage_dict(dict_manager, db)
+                elif choice == '6':
+                    search_messages(analyzer)
+            elif choice == '7':
+                manage_config(config)
+                if monitor:  # 如果监控器已初始化，更新其配置
+                    monitor.max_scroll = config['max_scroll']
+            else:
+                print("无效的选择")
+                
+        except Exception as e:
+            print(f"\n操作出错: {e}")
+            print("请重试或选择其他功能")
+            continue
     
     print("\n程序已退出")
 
