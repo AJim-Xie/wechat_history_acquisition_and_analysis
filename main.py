@@ -120,15 +120,16 @@ def select_or_create_chat(db):
 
 def show_main_menu():
     """显示主菜单"""
-    print("\n=== 微信聊天记录工具 ===")
-    print("1. 数据采集")
+    print("\n=== 微信聊天记录分析工具 ===")
+    print("1. 采集聊天记录")
     print("2. 数据分析")
     print("3. 数据导出")
     print("4. 数据清理")
     print("5. 词典管理")
-    print("6. 聊天记录搜索")
+    print("6. 搜索消息")
+    print("7. 配置选项")
     print("0. 退出程序")
-    return input("\n请选择功能(0-6): ")
+    return input("\n请选择功能(0-7): ")
 
 def show_collection_menu():
     """显示数据采集菜单"""
@@ -253,15 +254,14 @@ def analyze_data(analyzer, db, dict_manager):
     while True:
         print("\n=== 数据分析 ===")
         print("1. 基础统计分析")
-        print("2. 导出聊天记录")
-        print("3. 可视化分析")
-        print("4. 词频分析")
-        print("5. 生成思维导图")
-        print("6. 生成聊天故事")
+        print("2. 可视化分析")
+        print("3. 词频分析")
+        print("4. 生成思维导图")
+        print("5. 生成聊天故事")
         print("0. 返回主菜单")
         print("q. 退出程序")
         
-        choice = input("\n请选择功能(0-6,q): ")
+        choice = input("\n请选择功能(0-5,q): ")
         
         if choice.lower() == 'q':
             print("\n感谢使用,再见!")
@@ -270,7 +270,7 @@ def analyze_data(analyzer, db, dict_manager):
         elif choice == '0':
             break
             
-        elif choice == '4':  # 词频分析
+        elif choice == '3':  # 原来的4号选项改为3号
             print("\n=== 词频分析 ===")
             
             # 选择聊天对象
@@ -294,28 +294,7 @@ def analyze_data(analyzer, db, dict_manager):
                     chat_id = chats[int(chat_choice)-1]['chat_id']
             
             # 选择时间范围
-            print("\n请选择分析时间范围：")
-            print("1. 最近一周")
-            print("2. 最近一月")
-            print("3. 最近三月")
-            print("4. 自定义时间范围")
-            
-            time_choice = input("\n请选择(1-4): ")
-            start_time = None
-            end_time = None
-            
-            if time_choice in ['1', '2', '3']:
-                days = {'1': 7, '2': 30, '3': 90}[time_choice]
-                start_time = datetime.now() - timedelta(days=days)
-            elif time_choice == '4':
-                start_date = input("开始日期(YYYY-MM-DD): ")
-                end_date = input("结束日期(YYYY-MM-DD): ")
-                try:
-                    start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
-                    end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    print("日期格式错误")
-                    continue
+            start_time, end_time = get_time_range()
             
             # 选择输出目录
             output_dir = input("\n请输入分析结果保存路径（直接回车使用默认路径）: ").strip()
@@ -334,7 +313,7 @@ def analyze_data(analyzer, db, dict_manager):
             except Exception as e:
                 print(f"分析失败: {e}")
             
-        elif choice == '5':
+        elif choice == '4':
             # 生成思维导图
             print("\n=== 生成思维导图 ===")
             
@@ -357,28 +336,7 @@ def analyze_data(analyzer, db, dict_manager):
                     chat_id = chats[int(chat_choice)-1]['chat_id']
             
             # 选择时间范围
-            print("\n请选择分析时间范围：")
-            print("1. 最近一周")
-            print("2. 最近一月")
-            print("3. 最近三月")
-            print("4. 自定义时间范围")
-            
-            time_choice = input("\n请选择(1-4): ")
-            start_time = None
-            end_time = None
-            
-            if time_choice in ['1', '2', '3']:
-                days = {'1': 7, '2': 30, '3': 90}[time_choice]
-                start_time = datetime.now() - timedelta(days=days)
-            elif time_choice == '4':
-                start_date = input("开始日期(YYYY-MM-DD): ")
-                end_date = input("结束日期(YYYY-MM-DD): ")
-                try:
-                    start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
-                    end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    print("日期格式错误")
-                    continue
+            start_time, end_time = get_time_range()
             
             # 选择输出目录
             output_dir = input("\n请输入分析结果保存路径（直接回车使用默认路径）: ").strip()
@@ -409,24 +367,6 @@ def analyze_data(analyzer, db, dict_manager):
             print(f"活跃用户数: {stats['user_count']}")
             
         elif choice == '2':
-            print("\n=== 导出聊天记录 ===")
-            # 获取默认导出路径
-            default_path = os.path.join(os.path.expanduser('~'), 'Documents', 'WeChatExport')
-            os.makedirs(default_path, exist_ok=True)
-            
-            output_dir = input(f"\n请输入导出目录(直接回车使用默认路径 {default_path}): ").strip()
-            if not output_dir:
-                output_dir = default_path
-            
-            try:
-                # 导出聊天记录
-                analyzer.export_all(output_dir, True)
-                print(f"\n聊天记录已导出到: {output_dir}")
-                
-            except Exception as e:
-                print(f"导出失败: {e}")
-            
-        elif choice == '3':
             # 可视化分析
             print("\n=== 可视化分析 ===")
             
@@ -451,28 +391,7 @@ def analyze_data(analyzer, db, dict_manager):
                     chat_id = chats[int(chat_choice)-1]['chat_id']
             
             # 选择时间范围
-            print("\n请选择分析时间范围：")
-            print("1. 最近一周")
-            print("2. 最近一月")
-            print("3. 最近三月")
-            print("4. 自定义时间范围")
-            
-            time_choice = input("\n请选择(1-4): ")
-            start_time = None
-            end_time = None
-            
-            if time_choice in ['1', '2', '3']:
-                days = {'1': 7, '2': 30, '3': 90}[time_choice]
-                start_time = datetime.now() - timedelta(days=days)
-            elif time_choice == '4':
-                start_date = input("开始日期(YYYY-MM-DD): ")
-                end_date = input("结束日期(YYYY-MM-DD): ")
-                try:
-                    start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
-                    end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    print("日期格式错误")
-                    continue
+            start_time, end_time = get_time_range()
             
             # 选择输出目录
             output_dir = input("\n请输入分析结果保存路径（直接回车使用默认路径）: ").strip()
@@ -501,7 +420,7 @@ def analyze_data(analyzer, db, dict_manager):
             except Exception as e:
                 print(f"分析失败: {e}")
             
-        elif choice == '6':
+        elif choice == '5':
             print("\n=== 生成聊天故事 ===")
             
             # 选择聊天对象
@@ -523,28 +442,7 @@ def analyze_data(analyzer, db, dict_manager):
                     chat_id = chats[int(chat_choice)-1]['chat_id']
             
             # 选择时间范围
-            print("\n请选择分析时间范围：")
-            print("1. 最近一周")
-            print("2. 最近一月")
-            print("3. 最近三月")
-            print("4. 自定义时间范围")
-            
-            time_choice = input("\n请选择(1-4): ")
-            start_time = None
-            end_time = None
-            
-            if time_choice in ['1', '2', '3']:
-                days = {'1': 7, '2': 30, '3': 90}[time_choice]
-                start_time = datetime.now() - timedelta(days=days)
-            elif time_choice == '4':
-                start_date = input("开始日期(YYYY-MM-DD): ")
-                end_date = input("结束日期(YYYY-MM-DD): ")
-                try:
-                    start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
-                    end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    print("日期格式错误")
-                    continue
+            start_time, end_time = get_time_range()
             
             # 选择输出目录
             output_dir = input("\n请输入故事保存路径（直接回车使用默认路径）: ").strip()
@@ -608,19 +506,37 @@ def export_data(analyzer):
         if choice == '0':
             break
             
-        # 获取默认导出路径 - 改为项目目录下的 exports 子目录
+        # 获取默认导出路径
         default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exports')
         os.makedirs(default_path, exist_ok=True)
         
-        if choice == '1':
-            # 导出全部数据
+        if choice in ['1', '2']:  # 全部导出或按时间范围导出
+            # 选择导出格式
+            print("\n请选择导出格式：")
+            print("1. CSV")
+            print("2. JSON")
+            format_choice = input("\n请选择(1-2): ").strip()
+            format_type = 'csv' if format_choice == '1' else 'json'
+            
+            # 获取导出路径
             output_path = input(f"\n请输入导出文件路径(直接回车使用默认路径 {default_path}): ").strip()
             if not output_path:
                 output_path = default_path
                 
             try:
-                analyzer.export_all(output_path)
-                print(f"\n数据已导出到: {output_path}")
+                if choice == '1':  # 导出全部数据
+                    analyzer.export_chat(output_path, format=format_type)
+                    print(f"\n数据已导出到: {output_path}")
+                else:  # 按时间范围导出
+                    start_time, end_time = get_time_range()
+                    analyzer.export_chat(
+                        output_path,
+                        start_time=start_time,
+                        end_time=end_time,
+                        format=format_type
+                    )
+                    print(f"\n数据已导出到: {output_path}")
+                        
             except Exception as e:
                 print(f"导出失败: {e}")
 
@@ -811,39 +727,18 @@ def manage_dict(dict_manager, db):
         input("\n按回车键继续...")
 
 def search_messages(analyzer):
-    """聊天记录搜索功能"""
-    print("\n=== 聊天记录搜索 ===")
-    print("请输入搜索条件（直接回车跳过）：")
+    """搜索聊天记录"""
+    print("\n=== 搜索聊天记录 ===")
     
+    # 搜索条件
     conditions = {}
     
-    # 显示所有发送者列表
-    senders = analyzer.get_all_senders()
-    if senders:
-        print("\n可选的发送者：")
-        for i, sender in enumerate(senders, 1):
-            print(f"{i}. {sender}")
-        
-        sender_choice = input("\n请选择发送者序号（直接回车跳过）: ").strip()
-        if sender_choice.isdigit() and 1 <= int(sender_choice) <= len(senders):
-            conditions['sender'] = senders[int(sender_choice) - 1]
-    
-    keyword = input("关键词: ").strip()
+    # 输入关键词
+    keyword = input("\n请输入搜索关键词（直接回车跳过）: ").strip()
     if keyword:
         conditions['keyword'] = keyword
     
-    # 显示所有@提及用户列表
-    mentions = analyzer.get_all_mentions()
-    if mentions:
-        print("\n可选的@提及用户：")
-        for i, mention in enumerate(mentions, 1):
-            print(f"{i}. {mention}")
-        
-        mention_choice = input("\n请选择@提及用户序号（直接回车跳过）: ").strip()
-        if mention_choice.isdigit() and 1 <= int(mention_choice) <= len(mentions):
-            conditions['mention'] = mentions[int(mention_choice) - 1]
-    
-    # 显示所有聊天对象列表
+    # 选择聊天对象
     chats = analyzer.get_all_chats()
     if chats:
         print("\n可选的聊天对象：")
@@ -854,26 +749,12 @@ def search_messages(analyzer):
         if chat_choice.isdigit() and 1 <= int(chat_choice) <= len(chats):
             conditions['chat_name'] = chats[int(chat_choice)-1]['chat_name']
     
-    print("\n时间范围：")
-    print("1. 最近一天")
-    print("2. 最近一周")
-    print("3. 最近一月")
-    print("4. 自定义时间范围")
-    print("0. 不限时间")
-    
-    time_choice = input("请选择(0-4): ")
-    if time_choice in ['1', '2', '3']:
-        days = {'1': 1, '2': 7, '3': 30}[time_choice]
-        conditions['start_time'] = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
-    elif time_choice == '4':
-        start_date = input("开始日期(YYYY-MM-DD): ")
-        end_date = input("结束日期(YYYY-MM-DD): ")
-        try:
-            conditions['start_time'] = f"{start_date} 00:00:00"
-            conditions['end_time'] = f"{end_date} 23:59:59"
-        except ValueError:
-            print("日期格式错误")
-            return
+    # 选择时间范围
+    start_time, end_time = get_time_range()
+    if start_time is not None:
+        conditions['start_time'] = start_time.strftime('%Y-%m-%d %H:%M:%S')
+    if end_time is not None:
+        conditions['end_time'] = end_time.strftime('%Y-%m-%d %H:%M:%S')
     
     # 执行搜索
     results = analyzer.search_messages(conditions)
@@ -886,16 +767,100 @@ def search_messages(analyzer):
     print("-" * 60)
     
     for msg in results:
-        time_str = msg['time'].split('.')[0]  # 移毫秒部分
+        time_str = msg['time'].split('.')[0]  # 移除毫秒部分
         print(f"[{time_str}] {msg['chat_name']} - {msg['sender']}:")
         print(f"    {msg['content']}")
         print("-" * 60)
 
+def get_time_range():
+    """统一的时间范围选择函数"""
+    print("\n请选择时间范围：")
+    print("1. 当天")
+    print("2. 最近三天")
+    print("3. 最近一周")
+    print("4. 最近一月")
+    print("5. 全部时间")
+    print("6. 自定义时间范围")
+    
+    choice = input("\n请选择(1-6): ")
+    now = datetime.now()
+    
+    if choice in ['1', '2', '3', '4']:
+        days = {
+            '1': 0,
+            '2': 3,
+            '3': 7,
+            '4': 30
+        }[choice]
+        start_time = now - timedelta(days=days)
+        if choice == '1':  # 当天从0点开始
+            start_time = start_time.replace(hour=0, minute=0, second=0)
+        end_time = now
+        print(f"\n已选择时间范围: {start_time.strftime('%Y-%m-%d %H:%M:%S')} 至 {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        return start_time, end_time
+        
+    elif choice == '5':  # 全部时间
+        print("\n已选择: 全部时间范围")
+        return None, None  # 返回 None 表示不限制时间范围
+        
+    elif choice == '6':  # 自定义时间范围
+        print("\n请输入时间范围（格式：YYYY-MM-DD）：")
+        while True:
+            try:
+                start_date = input("开始日期: ")
+                end_date = input("结束日期: ")
+                start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
+                end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
+                print(f"\n已选择时间范围: {start_time.strftime('%Y-%m-%d %H:%M:%S')} 至 {end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                return start_time, end_time
+            except ValueError:
+                print("日期格式错误，请使用YYYY-MM-DD格式，例如：2023-12-31")
+    
+    return None, None  # 默认返回全部时间范围
+
+def manage_config(config):
+    """配置管理功能"""
+    while True:
+        print("\n=== 配置选项 ===")
+        print(f"1. 最大滚动次数 (当前: {config['max_scroll']})")
+        print(f"2. 导出文件默认路径 (当前: {config['export_path']})")
+        print("0. 返回主菜单")
+        
+        choice = input("\n请选择(0-2): ")
+        
+        if choice == '0':
+            break
+            
+        elif choice == '1':
+            scroll_input = input("请输入最大滚动次数: ").strip()
+            if scroll_input.isdigit() and int(scroll_input) > 0:
+                config['max_scroll'] = int(scroll_input)
+                print(f"\n已更新最大滚动次数为: {config['max_scroll']}")
+            else:
+                print("\n输入无效，请输入正整数")
+                
+        elif choice == '2':
+            new_path = input("请输入新的导出文件默认路径: ").strip()
+            if new_path:
+                try:
+                    os.makedirs(new_path, exist_ok=True)
+                    config['export_path'] = new_path
+                    print(f"\n已更新导出路径为: {config['export_path']}")
+                except Exception as e:
+                    print(f"\n路径设置失败: {e}")
+
 def main():
     """主函数"""
+    # 初始化配置
+    config = {
+        'max_scroll': 5,  # 默认最大滚动次数
+        'export_path': os.path.join(os.path.dirname(os.path.abspath(__file__)), 'exports')  # 默认导出路径
+    }
+    
     # 初始化组件
     db = DatabaseHandler()
     monitor = WeChatMonitor()
+    monitor.max_scroll = config['max_scroll']
     analyzer = DataAnalyzer(db)
     dict_manager = DictManager()
     
@@ -903,13 +868,6 @@ def main():
     if not monitor.find_wechat():
         print("未找到微信窗口，请确保微信已登录")
         return
-    
-    print("\n=== 配置选项 ===")
-    scroll_input = input("请输入最大滚动次数(直接回车使用默认值5): ").strip()
-    max_scroll = int(scroll_input) if scroll_input.isdigit() else None
-    
-    # 使用 monitor 而不是创建新的 controller
-    monitor.max_scroll = max_scroll  # 设置滚动次数
     
     while True:
         choice = show_main_menu()
@@ -921,13 +879,17 @@ def main():
         elif choice == '2':
             analyze_data(analyzer, db, dict_manager)
         elif choice == '3':
-            export_data(analyzer)
+            export_data(analyzer, config['export_path'])
         elif choice == '4':
             clean_data(analyzer)
         elif choice == '5':
             manage_dict(dict_manager, db)
         elif choice == '6':
             search_messages(analyzer)
+        elif choice == '7':
+            manage_config(config)
+            # 更新监控器的滚动次数
+            monitor.max_scroll = config['max_scroll']
         else:
             print("无效的选择")
     
