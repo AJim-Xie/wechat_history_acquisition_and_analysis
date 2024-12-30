@@ -236,16 +236,154 @@ def collect_data(monitor, db):
                 return
             
     except KeyboardInterrupt:
-        print("\n停止监控")
+        print("\n���止监控")
 
 def analyze_data(analyzer, db, dict_manager):
     """数据分析功能"""
     while True:
-        choice = show_analysis_menu()
+        print("\n=== 数据分析 ===")
+        print("1. 基础统计分析")
+        print("2. 导出聊天记录")
+        print("3. 可视化分析")
+        print("4. 词频分析")
+        print("5. 生成思维导图")
+        print("0. 返回主菜单")
+        
+        choice = input("\n请选择功能(0-5): ")
         
         if choice == '0':
-            return
+            break
             
+        elif choice == '4':  # 词频分析
+            print("\n=== 词频分析 ===")
+            
+            # 选择聊天对象
+            chats = analyzer.db.get_all_chats()
+            if not chats:
+                print("没有可用的聊天记录")
+                continue
+                
+            print("\n可用的聊天列表：")
+            print("0. 分析所有聊天")
+            for i, chat in enumerate(chats, 1):
+                chat_type = '群聊' if chat['chat_type'] == 2 else '私聊'
+                msg_count = analyzer.db.get_message_count(chat['chat_id'])
+                chat_name = chat['chat_name'].replace('聊天信息', '')
+                print(f"{i}. {chat_name} ({chat_type}, {msg_count}条消息)")
+            
+            chat_choice = input("\n请选择聊天序号: ")
+            chat_id = None
+            if chat_choice.isdigit():
+                if int(chat_choice) > 0 and int(chat_choice) <= len(chats):
+                    chat_id = chats[int(chat_choice)-1]['chat_id']
+            
+            # 选择时间范围
+            print("\n请选择分析时间范围：")
+            print("1. 最近一周")
+            print("2. 最近一月")
+            print("3. 最近三月")
+            print("4. 自定义时间范围")
+            
+            time_choice = input("\n请选择(1-4): ")
+            start_time = None
+            end_time = None
+            
+            if time_choice in ['1', '2', '3']:
+                days = {'1': 7, '2': 30, '3': 90}[time_choice]
+                start_time = datetime.now() - timedelta(days=days)
+            elif time_choice == '4':
+                start_date = input("开始日期(YYYY-MM-DD): ")
+                end_date = input("结束日期(YYYY-MM-DD): ")
+                try:
+                    start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
+                    end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    print("日期格式错误")
+                    continue
+            
+            # 选择输出目录
+            output_dir = input("\n请输入分析结果保存路径（直接回车使用默认路径）: ").strip()
+            if not output_dir:
+                output_dir = "analysis_results"
+            
+            try:
+                report_path = analyzer.analyze_word_frequency(
+                    chat_id=chat_id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    output_dir=output_dir
+                )
+                print(f"\n分析报告已生成：{report_path}")
+                
+            except Exception as e:
+                print(f"分析失败: {e}")
+            
+        elif choice == '5':
+            # 生成思维导图
+            print("\n=== 生成思维导图 ===")
+            
+            # 选择聊天对象
+            chats = analyzer.db.get_all_chats()
+            if not chats:
+                print("没有可用的聊天记录")
+                continue
+                
+            print("\n可用的聊天列表：")
+            for i, chat in enumerate(chats, 1):
+                chat_type = '群聊' if chat['chat_type'] == 2 else '私聊'
+                chat_name = chat['chat_name'].replace('聊天信息', '') if chat['chat_name'].endswith('聊天信息') else chat['chat_name']
+                print(f"{i}. {chat_name} ({chat_type})")
+            
+            chat_choice = input("\n请选择聊天序号: ")
+            chat_id = None
+            if chat_choice.isdigit():
+                if int(chat_choice) > 0 and int(chat_choice) <= len(chats):
+                    chat_id = chats[int(chat_choice)-1]['chat_id']
+            
+            # 选择时间范围
+            print("\n请选择分析时间范围：")
+            print("1. 最近一周")
+            print("2. 最近一月")
+            print("3. 最近三月")
+            print("4. 自定义时间范围")
+            
+            time_choice = input("\n请选择(1-4): ")
+            start_time = None
+            end_time = None
+            
+            if time_choice in ['1', '2', '3']:
+                days = {'1': 7, '2': 30, '3': 90}[time_choice]
+                start_time = datetime.now() - timedelta(days=days)
+            elif time_choice == '4':
+                start_date = input("开始日期(YYYY-MM-DD): ")
+                end_date = input("结束日期(YYYY-MM-DD): ")
+                try:
+                    start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
+                    end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    print("日期格式错误")
+                    continue
+            
+            # 选择输出目录
+            output_dir = input("\n请输入分析结果保存路径（直接回车使用默认路径）: ").strip()
+            if not output_dir:
+                output_dir = "analysis_results"
+            
+            try:
+                # 生成思维导图
+                output_path = analyzer.generate_mind_map(
+                    chat_id=chat_id,
+                    start_time=start_time,
+                    end_time=end_time,
+                    output_dir=output_dir
+                )
+                print(f"\n思维导图已生成：{output_path}")
+                
+            except Exception as e:
+                print(f"生成失败: {e}")
+            
+            input("\n按回车键继续...")
+        
         elif choice == '1':
             # 基础统计信息
             stats = analyzer.get_basic_stats()
@@ -255,6 +393,10 @@ def analyze_data(analyzer, db, dict_manager):
             print(f"活跃用户数: {stats['user_count']}")
             
         elif choice == '2':
+            # 导出聊天记录
+            export_data(analyzer)
+            
+        elif choice == '3':
             # 可视化分析
             print("\n=== 可视化分析 ===")
             
@@ -329,183 +471,6 @@ def analyze_data(analyzer, db, dict_manager):
             except Exception as e:
                 print(f"分析失败: {e}")
             
-        elif choice == '3':
-            # 自定义分析
-            print("\n=== 自定义分析 ===")
-            print("请选择要分析的维度（多选，用逗号分隔）：")
-            print("1. 时间维度（信息趋势、活跃时段）")
-            print("2. 用户维度（发言排名、活跃度）")
-            print("3. 内容维度（消息类型、关键词）")
-            print("4. 群组维度（成员互动、话题分析）")
-            
-            dimensions = input("\n请输入维度编号: ").split(',')
-            dimensions = [d.strip() for d in dimensions if d.strip() in ['1', '2', '3', '4']]
-            
-            if not dimensions:
-                print("未选择有效的分析维度")
-                continue
-            
-            # 选择聊天对象
-            chats = analyzer.get_all_chats()
-            if not chats:
-                print("没有可用的聊天记录")
-                continue
-                
-            print("\n可用的聊天列表：")
-            print("0. 分析所有聊天")
-            for i, chat in enumerate(chats, 1):
-                print(f"{i}. {chat['chat_name']} ({'群聊' if chat['chat_type'] == 2 else '私聊'})")
-            
-            chat_choice = input("\n请选择聊天序号: ")
-            chat_id = None
-            if chat_choice.isdigit():
-                if int(chat_choice) > 0 and int(chat_choice) <= len(chats):
-                    chat_id = chats[int(chat_choice)-1]['chat_id']
-            
-            # 选择时间范围
-            print("\n请选择分析时间范围：")
-            print("1. 最近一周")
-            print("2. 最近一月")
-            print("3. 最近三月")
-            print("4. 自定义时间范围")
-            
-            time_choice = input("\n请选择(1-4): ")
-            start_time = None
-            end_time = None
-            
-            if time_choice in ['1', '2', '3']:
-                days = {'1': 7, '2': 30, '3': 90}[time_choice]
-                start_time = datetime.now() - timedelta(days=days)
-            elif time_choice == '4':
-                start_date = input("开始日期(YYYY-MM-DD): ")
-                end_date = input("结束日期(YYYY-MM-DD): ")
-                try:
-                    start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
-                    end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    print("日期格式错误")
-                    continue
-            
-            try:
-                # 执行自定义分析
-                results = analyzer.custom_analyze(
-                    dimensions=dimensions,
-                    chat_id=chat_id,
-                    start_time=start_time,
-                    end_time=end_time
-                )
-                
-                # 显示分析结果
-                print("\n=== 分析结果 ===")
-                
-                if '1' in dimensions:  # 时间维度
-                    print("\n时间维度分析：")
-                    print(f"日均消息数: {results['time']['daily_avg']:.1f}")
-                    print(f"最活跃的时段: {results['time']['peak_hour']}时")
-                    print(f"最不活跃的时段: {results['time']['lowest_hour']}时")
-                    print(f"工作日占比: {results['time']['weekday_ratio']:.1%}")
-                    print(f"周末占比: {results['time']['weekend_ratio']:.1%}")
-                
-                if '2' in dimensions:  # 用户维度
-                    print("\n用户维度分析：")
-                    print("发言最多的用户：")
-                    for user in results['user']['top_users']:
-                        print(f"  {user['name']}: {user['count']}条消息")
-                    print(f"人均发言数: {results['user']['avg_messages']:.1f}")
-                
-                if '3' in dimensions:  # 内容维度
-                    print("\n内容维度分析：")
-                    print("消息类型分布：")
-                    for msg_type, ratio in results['content']['type_ratio'].items():
-                        print(f"  {msg_type}: {ratio:.1%}")
-                    print("\n热门关键词：")
-                    for word, weight in results['content']['keywords']:
-                        print(f"  {word}: {weight:.2f}")
-                
-                if '4' in dimensions and chat_id:  # 群组维度
-                    print("\n群组维度分析：")
-                    print(f"群成员数: {results['group']['member_count']}")
-                    print(f"活跃成员数: {results['group']['active_member_count']}")
-                    print(f"群活跃度: {results['group']['activity_score']:.2f}")
-                    print("互动最频繁的成员对：")
-                    for pair in results['group']['top_interactions']:
-                        print(f"  {pair['users']}: {pair['count']}次互动")
-                
-            except Exception as e:
-                print(f"分析失败: {e}")
-            
-        elif choice == '4':
-            # 生成思维导图
-            print("\n=== 生成思维导图 ===")
-            
-            # 选择聊天对象
-            chats = analyzer.db.get_all_chats()
-            if not chats:
-                print("没有可用的聊天记录")
-                continue
-                
-            print("\n可用的聊天列表：")
-            for i, chat in enumerate(chats, 1):
-                chat_type = '群聊' if chat['chat_type'] == 2 else '私聊'
-                chat_name = chat['chat_name'].replace('聊天信息', '') if chat['chat_name'].endswith('聊天信息') else chat['chat_name']
-                print(f"{i}. {chat_name} ({chat_type})")
-            
-            chat_choice = input("\n请选择聊天序号: ")
-            chat_id = None
-            if chat_choice.isdigit():
-                if int(chat_choice) > 0 and int(chat_choice) <= len(chats):
-                    chat_id = chats[int(chat_choice)-1]['chat_id']
-            
-            # 选择时间范围
-            print("\n请选择分析时间范围：")
-            print("1. 最近一周")
-            print("2. 最近一月")
-            print("3. 最近三月")
-            print("4. 自定义时间范围")
-            
-            time_choice = input("\n请选择(1-4): ")
-            start_time = None
-            end_time = None
-            
-            if time_choice in ['1', '2', '3']:
-                days = {'1': 7, '2': 30, '3': 90}[time_choice]
-                start_time = datetime.now() - timedelta(days=days)
-            elif time_choice == '4':
-                start_date = input("开始日期(YYYY-MM-DD): ")
-                end_date = input("结束日期(YYYY-MM-DD): ")
-                try:
-                    start_time = datetime.strptime(f"{start_date} 00:00:00", '%Y-%m-%d %H:%M:%S')
-                    end_time = datetime.strptime(f"{end_date} 23:59:59", '%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    print("日期格式错误")
-                    continue
-            
-            # 选择输出目录
-            output_dir = input("\n请输入分析结果保存路径（直接回车使用默���路径）: ").strip()
-            if not output_dir:
-                output_dir = "analysis_results"
-            
-            try:
-                # 生成思维导图
-                output_path = analyzer.generate_mind_map(
-                    chat_id=chat_id,
-                    start_time=start_time,
-                    end_time=end_time,
-                    output_dir=output_dir
-                )
-                print(f"\n思维导图已生成：{output_path}")
-                
-            except Exception as e:
-                print(f"生成失败: {e}")
-            
-            input("\n按回车键继续...")
-        
-        elif choice == '5':
-            if 'dict_manager' in locals() and 'db' in locals():
-                manage_dict(dict_manager, db)
-            else:
-                print("词典管理器或数据库未初始化")
-        
         elif choice == '6':
             search_messages(analyzer)
         
@@ -590,7 +555,7 @@ def clean_data(analyzer):
             
             try:
                 before_date = datetime.strptime(date_str, '%Y-%m-%d')
-                # 预览将要清理的数据
+                # 预览将要清��的数据
                 preview = analyzer.preview_clean_data(before_date=before_date)
                 
                 print("\n=== 清理预览 ===")
@@ -722,7 +687,7 @@ def manage_dict(dict_manager, db):
         
         elif choice == '7':
             # 合并词典
-            other_dict = input("请输入要合并的词典文件路径: ")
+            other_dict = input("请输入要合并��词典文件路径: ")
             print("\n请选择合并策略：")
             print("1. 取最大词频")
             print("2. 取最小词频")
@@ -827,13 +792,13 @@ def search_messages(analyzer):
     print("-" * 60)
     
     for msg in results:
-        time_str = msg['time'].split('.')[0]  # 移除毫秒部分
+        time_str = msg['time'].split('.')[0]  # 移毫秒部分
         print(f"[{time_str}] {msg['chat_name']} - {msg['sender']}:")
         print(f"    {msg['content']}")
         print("-" * 60)
 
 def main():
-    """���函数"""
+    """主函数"""
     # 初始化组件
     db = DatabaseHandler()
     monitor = WeChatMonitor()

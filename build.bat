@@ -6,12 +6,14 @@ del /f /q *.spec
 
 echo 正在安装打包工具...
 python -m pip install --upgrade pip
-pip install pyinstaller
+pip install pyinstaller==5.13.2
 
 echo 正在安装依赖...
+pip uninstall paddle paddlepaddle -y
 pip install -r requirements.txt --disable-pip-version-check
 
 echo 正在打包应用...
+set PYTHONPATH=%CD%
 pyinstaller --clean ^
     --onefile ^
     --name "微信聊天记录分析工具" ^
@@ -29,6 +31,8 @@ pyinstaller --clean ^
     --hidden-import networkx ^
     --hidden-import sklearn.feature_extraction.text ^
     --hidden-import sklearn.decomposition ^
+    --exclude-module paddle ^
+    --exclude-module paddlepaddle ^
     --icon=app.ico ^
     main.py
 

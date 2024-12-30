@@ -509,7 +509,7 @@ class DataAnalyzer:
                 try:
                     send_time = datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S.%f')
                 except ValueError:
-                    # 如果时间格式不匹配���尝试其他常见格式
+                    # 如果时间格式不匹配尝试其他常见格式
                     try:
                         send_time = datetime.strptime(row[3], '%Y-%m-%d %H:%M:%S')
                     except ValueError:
@@ -690,72 +690,113 @@ class DataAnalyzer:
             raise ValueError(f"分析失败: {str(e)}")
     
     def _analyze_time_patterns(self, messages, output_dir):
-        """分析时���维度模式"""
-        # 1. 消息数量趋势
-        plt.figure(figsize=(15, 6))
-        daily_counts = messages.groupby(messages['send_time'].dt.date).size()
-        plt.plot(daily_counts.index, daily_counts.values)
-        plt.title('每日消息数量趋势')
-        plt.xlabel('日期')
-        plt.ylabel('消息数量')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, 'daily_message_trend.png'))
-        plt.close()
-        
-        # 2. 每小时活跃度分布
-        plt.figure(figsize=(12, 6))
-        hourly_counts = messages.groupby(messages['send_time'].dt.hour).size()
-        plt.bar(hourly_counts.index, hourly_counts.values)
-        plt.title('消息发送时段分布')
-        plt.xlabel('小时')
-        plt.ylabel('消息数量')
-        plt.savefig(os.path.join(output_dir, 'hourly_distribution.png'))
-        plt.close()
+        """分析时间模式"""
+        try:
+            # 转换为numpy数组进行处理
+            messages_np = messages.to_numpy()
+            times = pd.to_datetime(messages_np[:, messages.columns.get_loc('send_time')])
+            
+            # 1. 按小时统计
+            hours = np.array([t.hour for t in times])
+            hour_counts = np.bincount(hours, minlength=24)
+            
+            plt.figure(figsize=(12, 6))
+            plt.bar(np.arange(24), hour_counts)
+            plt.title('每小时消息分布')
+            plt.xlabel('小时')
+            plt.ylabel('消息数量')
+            plt.xticks(np.arange(24))
+            plt.savefig(os.path.join(output_dir, 'hourly_dist.png'))
+            plt.close()
+            
+            # 2. 按星期统计
+            weekdays = np.array([t.weekday() for t in times])
+            weekday_counts = np.bincount(weekdays, minlength=7)
+            weekday_labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+            
+            plt.figure(figsize=(10, 6))
+            plt.bar(weekday_labels, weekday_counts)
+            plt.title('每周消息分布')
+            plt.xlabel('星期')
+            plt.ylabel('消息数量')
+            plt.savefig(os.path.join(output_dir, 'weekly_dist.png'))
+            plt.close()
+            
+            # 3. 按日期统计
+            dates = np.array([t.date() for t in times])
+            unique_dates = np.unique(dates)
+            date_counts = np.array([np.sum(dates == d) for d in unique_dates])
+            
+            plt.figure(figsize=(15, 6))
+            plt.plot(unique_dates, date_counts)
+            plt.title('每日消息趋势')
+            plt.xlabel('日期')
+            plt.ylabel('消息数量')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_dir, 'daily_trend.png'))
+            plt.close()
+            
+        except Exception as e:
+            self.logger.error(f"时间模式分析失败: {str(e)}")
+            raise
     
     def _analyze_user_patterns(self, messages, output_dir):
-        """分析用户维度模式"""
-        # 1. 用户发言排名
-        plt.figure(figsize=(12, 6))
-        user_counts = messages.groupby('sender_name').size().sort_values(ascending=True)
-        plt.barh(user_counts.index, user_counts.values)
-        plt.title('用户发言数量排名')
-        plt.xlabel('消息数量')
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, 'user_ranking.png'))
-        plt.close()
-        
-        # 2. 用户活跃度热力图
-        user_hour_counts = messages.groupby([messages['send_time'].dt.hour, 'sender_name']).size().unstack(fill_value=0)
-        plt.figure(figsize=(15, 8))
-        sns.heatmap(user_hour_counts, cmap='YlOrRd')
-        plt.title('用户活跃时段分布')
-        plt.xlabel('用户')
-        plt.ylabel('小时')
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_dir, 'user_activity_heatmap.png'))
-        plt.close()
+        """分析用户模式"""
+        try:
+            # 转换为numpy数组
+            messages_np = messages.to_numpy()
+            senders = messages_np[:, messages.columns.get_loc('sender_name')]
+            
+            # 1. 用户发言频率
+            unique_senders, sender_counts = np.unique(senders, return_counts=True)
+            sort_idx = np.argsort(sender_counts)[::-1]
+            
+            plt.figure(figsize=(12, 6))
+            plt.bar(unique_senders[sort_idx][:10], sender_counts[sort_idx][:10])
+            plt.title('用户发言频率（前10名）')
+            plt.xticks(rotation=45, ha='right')
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_dir, 'user_activity.png'))
+            plt.close()
+            
+        except Exception as e:
+            self.logger.error(f"用户模式分析失败: {str(e)}")
+            raise
     
     def _analyze_content_patterns(self, messages, output_dir):
-        """分析内容维度模式"""
-        # 1. 消息类型分布
-        plt.figure(figsize=(8, 8))
-        type_counts = messages['msg_type'].value_counts()
-        plt.pie(type_counts.values, labels=type_counts.index, autopct='%1.1f%%')
-        plt.title('消息类型分布')
-        plt.savefig(os.path.join(output_dir, 'message_types.png'))
-        plt.close()
-        
-        # 2. 词云图
-        text = ' '.join(messages[messages['msg_type'] == 1]['content'].astype(str))
-        words = ' '.join(jieba.analyse.extract_tags(text, topK=100, withWeight=False))
-        wordcloud = WordCloud(width=800, height=400, background_color='white', font_path='simhei.ttf')
-        wordcloud.generate(words)
-        plt.figure(figsize=(15, 8))
-        plt.imshow(wordcloud, interpolation='bilinear')
-        plt.axis('off')
-        plt.savefig(os.path.join(output_dir, 'wordcloud.png'))
-        plt.close()
+        """分析内容模式"""
+        try:
+            # 转换为numpy数组
+            messages_np = messages.to_numpy()
+            contents = messages_np[:, messages.columns.get_loc('content')]
+            msg_types = messages_np[:, messages.columns.get_loc('msg_type')]
+            
+            # 1. 消息类型分布
+            unique_types, type_counts = np.unique(msg_types, return_counts=True)
+            type_labels = ['文本', '图片', '语音', '视频', '文件', '其他']
+            
+            plt.figure(figsize=(8, 8))
+            plt.pie(type_counts, labels=[type_labels[t-1] if t-1 < len(type_labels) else '其他' for t in unique_types],
+                    autopct='%1.1f%%')
+            plt.title('消息类型分布')
+            plt.savefig(os.path.join(output_dir, 'msg_types.png'))
+            plt.close()
+            
+            # 2. 文本长度分布
+            text_lengths = np.array([len(str(c)) for c in contents if isinstance(c, str)])
+            
+            plt.figure(figsize=(10, 6))
+            plt.hist(text_lengths, bins=30)
+            plt.title('消息长度分布')
+            plt.xlabel('长度')
+            plt.ylabel('频率')
+            plt.savefig(os.path.join(output_dir, 'content_length.png'))
+            plt.close()
+            
+        except Exception as e:
+            self.logger.error(f"内容模式分析失败: {str(e)}")
+            raise
     
     def _analyze_group_patterns(self, messages, output_dir):
         """分析群组维度模式"""
@@ -928,11 +969,11 @@ class DataAnalyzer:
                             "Graphviz未正确安装或未添加到系统PATH中。\n"
                             "请按照以下步骤检查：\n"
                             "1. 确认Graphviz已正确安装: https://graphviz.org/download/\n"
-                            "2. ��查系统环境变量PATH中是否包含Graphviz的bin目录\n"
+                            "2. 检查系统环境变量PATH中是否包含Graphviz的bin目录\n"
                             "3. 重启电脑后重试\n"
                             "4. 如果问题仍然存在，请手动将Graphviz安装目录添加到PATH中"
                         )
-            
+                    
             except ImportError:
                 raise ValueError("请先安装graphviz包：pip install graphviz")
             
@@ -944,9 +985,9 @@ class DataAnalyzer:
             
             # 获取聊天记录
             messages = self._get_messages(chat_id, start_time, end_time)
+            
             if not messages:
-                print("没有找到聊天记录")
-                return None
+                raise ValueError("未找到符合条件的消息记录")
             
             # 加载并验证自定义词典
             dict_manager = DictManager()
@@ -957,134 +998,81 @@ class DataAnalyzer:
             else:
                 self.logger.warning(f"加载自定义词典失败: {msg}")
             
-            # 提取所有文本内容
-            texts = [msg['content'] for msg in messages if msg['content']]
+            # 提取所有文本内容并预处理
+            texts = []
+            for msg in messages:
+                if msg['content'] and isinstance(msg['content'], str):
+                    # 移除URL、表情符号等
+                    text = re.sub(r'http[s]?://\S+', '', msg['content'])
+                    text = re.sub(r'\[.*?\]', '', text)
+                    text = text.strip()
+                    if text:
+                        texts.append(text)
             
-            # 文本预处理
-            processed_texts = []
-            for text in texts:
-                # 移除URL、表情符号等
-                text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
-                text = re.sub(r'\[.*?\]', '', text)
-                processed_texts.append(text)
-            
-            # 使用TF-IDF提取关键词
-            tfidf_keywords = []
-            for text in processed_texts:
-                keywords = jieba.analyse.extract_tags(text, topK=20, withWeight=True,
-                                                   allowPOS=('ns', 'n', 'vn', 'v', 'nr'))
-                tfidf_keywords.extend(keywords)
-            
-            # 创建主题模型
-            n_topics = min(10, len(processed_texts) // 50 + 3)  # 动态确定主题数
-            vectorizer = CountVectorizer(max_features=2000,
-                                       stop_words=['的', '了', '在', '是', '我', '有', '和', '就'])
-            tf = vectorizer.fit_transform(processed_texts)
-            
-            lda = LatentDirichletAllocation(
-                n_components=n_topics,
-                max_iter=50,
-                learning_method='online',
-                random_state=0
-            )
-            
-            lda.fit(tf)
+            if not texts:
+                raise ValueError("没有可分析的文本内容")
             
             # 创建思维导图
-            dot = graphviz.Digraph(comment='Chat Content Mind Map')
+            dot = graphviz.Digraph(comment='Chat Content Mind Map', encoding='utf-8')
             dot.attr(rankdir='TB')
             
-            # 设置根节点
-            chat_name = self._get_chat_name(chat_id) if chat_id else "全部聊天"
-            time_range = f"\n{start_time.strftime('%Y-%m-%d') if start_time else ''} ~ {end_time.strftime('%Y-%m-%d') if end_time else ''}"
-            root_label = f'''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">
-                <TR><TD><B>{chat_name}</B></TD></TR>
-                <TR><TD><FONT POINT-SIZE="10">{time_range}</FONT></TD></TR>
-                <TR><TD><FONT POINT-SIZE="10">{len(messages)}条消息</FONT></TD></TR>
-            </TABLE>>'''
+            # 设置节点和边的样式
+            dot.attr('node', shape='box', style='rounded,filled', 
+                    fontname='SimHei', fontsize='12')
+            dot.attr('edge', fontname='SimHei', fontsize='10')
             
-            dot.node('root', root_label, shape='box', style='filled', fillcolor='#e3f2fd')
+            # 添加根节点（聊天名称）
+            chat_name = messages[0]['chat_name']
+            dot.node('root', chat_name, fillcolor='#e3f2fd')
             
-            # 添加TF-IDF关键词主节点
-            dot.node('tfidf', '<<B>热门关键词</B>>', shape='box', style='filled,rounded', fillcolor='#fff3e0')
-            dot.edge('root', 'tfidf')
+            # 提取高频词和典型消息
+            keywords = jieba.analyse.textrank(
+                '\n'.join(texts),
+                topK=10,
+                allowPOS=('ns', 'n', 'vn', 'v', 'nr')
+            )
             
-            # 添加TF-IDF关键词子节点
-            keyword_counter = Counter(k for k, w in tfidf_keywords)
-            top_keywords = sorted(keyword_counter.items(), key=lambda x: x[1], reverse=True)[:15]
-            for i, (keyword, freq) in enumerate(top_keywords):
-                kid = f'keyword_{i}'
-                dot.node(kid, f'{keyword}\n({freq})', shape='ellipse', style='filled', fillcolor='#f3e5f5')
-                dot.edge('tfidf', kid)
+            # 添加高频词分支
+            dot.node('keywords', '高频词', fillcolor='#f3e5f5')
+            dot.edge('root', 'keywords')
             
-            # 添加LDA主题
-            feature_names = vectorizer.get_feature_names_out()
-            for topic_idx, topic in enumerate(lda.components_):
-                # 获取主题词权重
-                word_weights = [(feature_names[i], topic[i]) for i in topic.argsort()[:-20-1:-1]]
-                word_weights.sort(key=lambda x: x[1], reverse=True)
-                
-                # 过滤权重过低的词
-                topic_words = [word for word, weight in word_weights if weight > 0.005 and len(word) > 1][:12]
-                
-                if not topic_words:
-                    continue
-                
-                # 使用HTML标签格式化主题名称
-                topic_name = f'''<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="2">
-                    <TR><TD><B>主题{topic_idx + 1}</B></TD></TR>
-                    <TR><TD>{', '.join(topic_words[:4])}</TD></TR>
-                </TABLE>>'''
-                
-                # 添加主题节点
-                topic_id = f'topic_{topic_idx}'
-                dot.node(topic_id,
-                    topic_name,
-                    shape='box',
-                    fontsize='14',
-                    fillcolor='#e8f5e9',
-                    style='filled,rounded'
-                )
-                dot.edge('root', topic_id)
-                
-                # 添加关键词节点，按权重分组
-                for i, word in enumerate(topic_words[4:], 1):
-                    word_id = f"{topic_id}_{word}"
-                    weight_group = i // 4  # 每4个词一组
-                    fillcolors = ['#f3e5f5', '#fff3e0', '#e1f5fe']  # 不同组使用不同颜色
-                    dot.node(word_id,
-                        word,
-                        fontsize='12',
-                        shape='ellipse',
-                        fillcolor=fillcolors[weight_group % len(fillcolors)],
-                        style='filled'
-                    )
-                    dot.edge(topic_id, word_id)
+            for i, keyword in enumerate(keywords):
+                node_id = f'kw_{i}'
+                dot.node(node_id, keyword, fillcolor='#fff3e0')
+                dot.edge('keywords', node_id)
             
-            # 添加时间分布节点
-            time_stats = self._get_time_distribution(messages)
-            if time_stats:
-                dot.node('time_dist', '<<B>时间分布</B>>', shape='box', style='filled,rounded', fillcolor='#e1f5fe')
-                dot.edge('root', 'time_dist')
-                
-                for period, count in time_stats.items():
-                    node_id = f'time_{period}'
-                    dot.node(node_id, f'{period}\n({count}条)', shape='ellipse', style='filled', fillcolor='#e8f5e9')
-                    dot.edge('time_dist', node_id)
+            # 添加典型消息分支
+            dot.node('messages', '典型消息', fillcolor='#f3e5f5')
+            dot.edge('root', 'messages')
             
-            # 设置图形属性
-            dot.attr(bgcolor='white')
-            dot.attr(size='8,8')
+            # 选择有代表性的消息（长度适中且包含关键词的消息）
+            representative_msgs = []
+            for text in texts:
+                if 10 <= len(text) <= 50 and any(kw in text for kw in keywords):
+                    representative_msgs.append(text)
+                    if len(representative_msgs) >= 5:  # 限制显示5条典型消息
+                        break
+            
+            for i, msg in enumerate(representative_msgs):
+                node_id = f'msg_{i}'
+                # 消息内容截断，避免过长
+                display_msg = msg[:30] + '...' if len(msg) > 30 else msg
+                dot.node(node_id, display_msg, fillcolor='#e1f5fe')
+                dot.edge('messages', node_id)
             
             # 保存思维导图
-            output_path = os.path.join(output_dir or self.export_path, f'mind_map_{datetime.now().strftime("%Y%m%d_%H%M%S")}')
+            if not output_dir:
+                output_dir = "analysis_results"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            output_path = os.path.join(output_dir, 'mind_map')
             dot.render(output_path, format='png', cleanup=True)
-            print(f"\n思维导图已保存至: {output_path}.png")
-            return output_path + '.png'
+            
+            return f"{output_path}.png"
             
         except Exception as e:
-            self.logger.error(f"生成思维导图失败: {e}")
-            raise
+            self.logger.error(f"生成思维导图失败: {str(e)}")
+            raise ValueError(f"生成失败: {str(e)}")
     
     def _get_time_distribution(self, messages):
         """获取消息的时间分布统计"""
@@ -1167,70 +1155,94 @@ class DataAnalyzer:
             conn.close() 
     
     def _get_messages(self, chat_id=None, start_time=None, end_time=None):
-        """获取指定条件的消息记录
-        
-        Args:
-            chat_id: 聊天ID
-            start_time: 开始时间
-            end_time: 结束时间
-        
-        Returns:
-            list: 消息记录列表
-        """
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        
-        conditions = []
-        params = []
-        
-        if chat_id:
-            conditions.append("chat_id = ?")
-            params.append(chat_id)
-        if start_time:
-            conditions.append("send_time >= ?")
-            params.append(start_time)
-        if end_time:
-            conditions.append("send_time <= ?")
-            params.append(end_time)
-            
-        where_clause = " AND ".join(conditions) if conditions else "1=1"
-        
+        """获取聊天记录"""
         try:
-            cursor.execute(f"""
+            conn = sqlite3.connect(self.db.db_path)
+            
+            # 构建查询条件
+            conditions = []
+            params = []
+            
+            if chat_id:
+                conditions.append("m.chat_id = ?")
+                params.append(chat_id)
+                
+            if start_time:
+                conditions.append("m.send_time >= ?")
+                if isinstance(start_time, datetime):
+                    params.append(start_time.strftime('%Y-%m-%d %H:%M:%S'))
+                else:
+                    params.append(start_time)
+                    
+            if end_time:
+                conditions.append("m.send_time <= ?")
+                if isinstance(end_time, datetime):
+                    params.append(end_time.strftime('%Y-%m-%d %H:%M:%S'))
+                else:
+                    params.append(end_time)
+            
+            # 构建WHERE子句
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
+            
+            query = f"""
                 SELECT 
-                    msg_id,
-                    chat_id,
-                    sender_name,
-                    content,
-                    send_time,
-                    msg_type
-                FROM messages 
+                    m.msg_id,
+                    m.sender_name,
+                    m.content,
+                    m.send_time,
+                    m.msg_type,
+                    c.chat_name
+                FROM messages m
+                JOIN chats c ON m.chat_id = c.chat_id
                 WHERE {where_clause}
-                ORDER BY send_time
-            """, params)
+                ORDER BY m.send_time
+            """
             
-            columns = ['msg_id', 'chat_id', 'sender_name', 'content', 'send_time', 'msg_type']
-            messages = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            messages = []
             
-            # 转换send_time为datetime对象
-            for msg in messages:
+            for row in cursor.fetchall():
                 try:
-                    msg['send_time'] = datetime.strptime(msg['send_time'], '%Y-%m-%d %H:%M:%S.%f')
-                except ValueError:
-                    try:
-                        msg['send_time'] = datetime.strptime(msg['send_time'], '%Y-%m-%d %H:%M:%S')
-                    except ValueError:
-                        self.logger.warning(f"无法解析时间格式: {msg['send_time']}")
+                    # 尝试多种时间格式
+                    send_time = None
+                    time_formats = [
+                        '%Y-%m-%d %H:%M:%S.%f',
+                        '%Y-%m-%d %H:%M:%S',
+                        '%Y-%m-%d %H:%M'
+                    ]
+                    
+                    for fmt in time_formats:
+                        try:
+                            send_time = datetime.strptime(row[3], fmt)
+                            break
+                        except ValueError:
+                            continue
+                    
+                    if send_time is None:
+                        self.logger.warning(f"无法解析时间格式: {row[3]}")
                         continue
-            
+                    
+                    messages.append({
+                        'msg_id': row[0],
+                        'sender_name': row[1],
+                        'content': row[2],
+                        'send_time': send_time,
+                        'msg_type': row[4],
+                        'chat_name': row[5]
+                    })
+                    
+                except Exception as e:
+                    self.logger.warning(f"处理消息记录失败: {str(e)}")
+                    continue
+                
+            cursor.close()
+            conn.close()
             return messages
             
         except Exception as e:
-            self.logger.error(f"获取消息记录失败: {e}")
-            return []
-            
-        finally:
-            conn.close()
+            self.logger.error(f"获取聊天记录失败: {str(e)}")
+            raise
     
     def _get_chat_name(self, chat_id):
         """获取聊天名称
@@ -1355,3 +1367,190 @@ class DataAnalyzer:
             return list(set(mentions))  # 去重
         finally:
             conn.close() 
+    
+    def plot_activity_by_time(self, data, output_path):
+        """绘制活跃度时间分布图"""
+        try:
+            # 转换为numpy数组进行处理
+            hour_data = np.array(data['hour_dist'])
+            weekday_data = np.array(data['weekday_dist'])
+            
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
+            
+            # 小时活跃度
+            hours = np.arange(24)
+            ax1.bar(hours, hour_data)
+            ax1.set_title('每小时消息数量分布')
+            ax1.set_xlabel('小时')
+            ax1.set_ylabel('消息数量')
+            
+            # 星期活跃度
+            weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
+            ax2.bar(weekdays, weekday_data)
+            ax2.set_title('星期消息数量分布')
+            ax2.set_xlabel('星期')
+            ax2.set_ylabel('消息数量')
+            
+            plt.tight_layout()
+            plt.savefig(f"{output_path}/activity_dist.png", dpi=300, bbox_inches='tight')
+            plt.close()
+            
+        except Exception as e:
+            self.logger.error(f"绘制活跃度分布图失败: {e}")
+            raise
+    
+    def plot_user_activity(self, data, output_path):
+        """绘制用户活跃度图"""
+        try:
+            # 转换为numpy数组
+            users = np.array(list(data['user_activity'].keys()))
+            counts = np.array(list(data['user_activity'].values()))
+            
+            # 按消息数量排序
+            sort_idx = np.argsort(counts)[::-1]
+            users = users[sort_idx]
+            counts = counts[sort_idx]
+            
+            # 只显示前10名用户
+            if len(users) > 10:
+                users = users[:10]
+                counts = counts[:10]
+            
+            plt.figure(figsize=(12, 6))
+            plt.bar(users, counts)
+            plt.xticks(rotation=45, ha='right')
+            plt.title('用户活跃度排名（前10名）')
+            plt.xlabel('用户')
+            plt.ylabel('消息数量')
+            plt.tight_layout()
+            plt.savefig(f"{output_path}/user_activity.png", dpi=300, bbox_inches='tight')
+            plt.close()
+            
+        except Exception as e:
+            self.logger.error(f"绘制用户活跃度图失败: {e}")
+            raise
+    
+    def plot_message_types(self, data, output_path):
+        """绘制消息类型分布图"""
+        try:
+            types = np.array(list(data['msg_types'].keys()))
+            counts = np.array(list(data['msg_types'].values()))
+            
+            plt.figure(figsize=(10, 6))
+            plt.pie(counts, labels=types, autopct='%1.1f%%')
+            plt.title('消息类型分布')
+            plt.axis('equal')
+            plt.savefig(f"{output_path}/msg_types.png", dpi=300, bbox_inches='tight')
+            plt.close()
+            
+        except Exception as e:
+            self.logger.error(f"绘制消息类型分布图失败: {e}")
+            raise 
+    
+    def analyze_word_frequency(self, chat_id=None, start_time=None, end_time=None, output_dir=None):
+        """分析词频"""
+        try:
+            conn = sqlite3.connect(self.db.db_path)
+            
+            # 构建查询条件
+            conditions = ["msg_type = 1"]  # 只分析文本消息
+            params = []
+            if chat_id:
+                conditions.append("chat_id = ?")
+                params.append(chat_id)
+            if start_time:
+                conditions.append("send_time >= ?")
+                # 确保时间格式正确
+                if isinstance(start_time, datetime):
+                    params.append(start_time.strftime('%Y-%m-%d %H:%M:%S'))
+                else:
+                    params.append(start_time)
+            if end_time:
+                conditions.append("send_time <= ?")
+                if isinstance(end_time, datetime):
+                    params.append(end_time.strftime('%Y-%m-%d %H:%M:%S'))
+                else:
+                    params.append(end_time)
+            
+            where_clause = " AND ".join(conditions)
+            
+            # 获取文本消息
+            query = f"""
+            SELECT content
+            FROM messages
+            WHERE {where_clause}
+            """
+            
+            df = pd.read_sql_query(query, conn, params=params)
+            conn.close()
+            
+            if df.empty:
+                raise ValueError("未找到符合条件的文本消息")
+            
+            # 创建输出目录
+            if output_dir is None:
+                output_dir = "analysis_results"
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # 加载自定义词典
+            dict_manager = DictManager()
+            jieba.load_userdict(dict_manager.dict_path)
+            
+            # 分词统计
+            word_freq = defaultdict(int)
+            for text in df['content']:
+                if isinstance(text, str):
+                    words = jieba.cut(text)
+                    for word in words:
+                        if len(word.strip()) > 1:  # 过滤单字词
+                            word_freq[word] += 1
+            
+            # 生成词频报告
+            sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
+            report = "词频统计报告\n" + "="*20 + "\n\n"
+            report += "Top 50 高频词：\n\n"
+            for word, freq in sorted_words[:50]:
+                report += f"{word}: {freq}次\n"
+            
+            # 保存报告
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            report_path = os.path.join(output_dir, f"word_frequency_{timestamp}.txt")
+            with open(report_path, 'w', encoding='utf-8') as f:
+                f.write(report)
+            
+            # 生成词云图
+            if sorted_words:
+                wordcloud = WordCloud(
+                    font_path='simhei.ttf',
+                    width=1200,
+                    height=800,
+                    background_color='white'
+                ).generate_from_frequencies(dict(sorted_words))
+                
+                plt.figure(figsize=(15, 10))
+                plt.imshow(wordcloud, interpolation='bilinear')
+                plt.axis('off')
+                plt.title('词频分布词云图')
+                plt.savefig(os.path.join(output_dir, f"wordcloud_{timestamp}.png"))
+                plt.close()
+            
+            # 生成词频分布柱状图
+            if len(sorted_words) > 20:
+                top_words = sorted_words[:20]
+                words, freqs = zip(*top_words)
+                
+                plt.figure(figsize=(15, 8))
+                plt.bar(words, freqs)
+                plt.xticks(rotation=45, ha='right')
+                plt.title('Top 20 高频词')
+                plt.xlabel('词语')
+                plt.ylabel('出现次数')
+                plt.tight_layout()
+                plt.savefig(os.path.join(output_dir, f"word_freq_bar_{timestamp}.png"))
+                plt.close()
+            
+            return report_path
+            
+        except Exception as e:
+            self.logger.error(f"词频分析失败: {str(e)}")
+            raise 

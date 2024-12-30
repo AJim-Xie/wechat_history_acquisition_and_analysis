@@ -45,7 +45,7 @@ class DatabaseHandler:
             )
             ''')
             
-            # 创建唯一��引
+            # 创建唯一引
             cursor.execute('''
             CREATE UNIQUE INDEX IF NOT EXISTS idx_message_unique 
             ON messages(chat_id, sender_name, send_time, content)
@@ -455,4 +455,33 @@ class DatabaseHandler:
             self.logger.error(f"导出失败: {e}")
             return False, str(e)
         finally:
-            conn.close() 
+            conn.close()
+            
+    def get_message_count(self, chat_id=None):
+        """获取消息数量
+        
+        Args:
+            chat_id: 聊天ID，如果为None则返回所有消息数量
+            
+        Returns:
+            int: 消息数量
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            if chat_id:
+                cursor.execute(
+                    "SELECT COUNT(*) FROM messages WHERE chat_id = ?",
+                    (chat_id,)
+                )
+            else:
+                cursor.execute("SELECT COUNT(*) FROM messages")
+                
+            count = cursor.fetchone()[0]
+            conn.close()
+            return count
+            
+        except Exception as e:
+            self.logger.error(f"获取消息数量失败: {str(e)}")
+            return 0 
